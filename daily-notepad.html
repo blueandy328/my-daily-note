@@ -1,2549 +1,327 @@
-<!DOCTYPE html>
-<html lang="zh-CN"><head>
+<html lang="zh-CN">
+<head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>每日记事本</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GitHub 每日笔记 | 实时同步</title>
 <style>
   :root {
-    --bg: #1a1f1c;
-    --card: #252b28;
-    --card-hover: #2d3431;
-    --primary: #6db4d9;
-    --primary-dark: #5a9fc7;
-    --primary-light: #1e2d34;
-    --text: #ccd2cf;
-    --text-light: #7e8983;
-    --border: #363d3a;
-    --danger: #e8616a;
-    --danger-light: #3a272a;
-    --success: #4cae7f;
-    --income: #4cae7f;
-    --income-light: #1e3a2a;
-    --expense: #e8865a;
-    --expense-light: #3a2a22;
-    --shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-    --radius: 14px;
-    color-scheme: dark;
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --text-main: #2c3e50;
+    --text-sec: #7f8c8d;
+    --primary: #0366d6; /* GitHub Blue */
+    --success: #28a745;
+    --warning: #ffc107;
+    --error: #dc3545;
+    --border: #e1e4e8;
+    --radius: 8px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
   }
+  * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; padding: 15px; }
+  
+  /* 顶部导航 */
+  header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid var(--border); margin-bottom: 15px; }
+  h1 { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .btn-group { display: flex; gap: 8px; }
+  button { border: none; background: var(--card); color: var(--text-main); padding: 8px 12px; border-radius: var(--radius); cursor: pointer; font-size: 0.9rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: 0.2s; }
+  button:active { transform: scale(0.96); }
+  button.primary { background: var(--primary); color: white; }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  /* 日期与编辑器 */
+  .control-bar { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+  input[type="date"] { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 1rem; background: var(--card); }
+  .editor-wrap { flex: 1; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
+  textarea { width: 100%; height: 100%; border: none; resize: none; font-size: 1.05rem; line-height: 1.6; color: var(--text-main); background: transparent; font-family: inherit; }
+  
+  /* 状态栏 */
+  .status-bar { margin-top: 15px; padding: 10px 15px; background: var(--card); border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-sec); box-shadow: var(--shadow); }
+  .sync-info { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+  .dot.syncing { background: var(--warning); animation: pulse 1s infinite; }
+  .dot.synced { background: var(--success); }
+  .dot.error { background: var(--error); }
+  
+  /* 模态框 */
+  .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.4); z-index: 1000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
+  .modal { background: var(--card); width: 90%; max-width: 400px; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+  .modal h2 { margin-bottom: 20px; font-size: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .form-item { margin-bottom: 15px; }
+  .form-item label { display: block; font-size: 0.9rem; margin-bottom: 5px; color: var(--text-sec); }
+  .form-item input, .form-item select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-btns button { flex: 1; padding: 12px; }
+  .helper-link { display: block; margin-top: 5px; font-size: 0.8rem; color: var(--primary); text-decoration: none; }
 
-  body {
-    font-family: "Microsoft YaHei", "PingFang SC", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.6;
-    min-height: 100vh;
-    -webkit-font-smoothing: antialiased;
-  }
+  /* Toast */
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px; font-size: 0.9rem; z-index: 2000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
 
-  .container {
-    max-width: 900px;
-    margin: 0 auto;
-    padding: 28px 20px 60px;
-  }
-
-  /* 头部 */
-  .header {
-    text-align: center;
-    margin-bottom: 28px;
-  }
-  .header h1 {
-    font-size: 30px;
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: 1px;
-  }
-  .header p {
-    color: var(--text-light);
-    font-size: 14px;
-    margin-top: 6px;
-  }
-
-  /* 日期导航 */
-  .date-bar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    background: var(--card);
-    padding: 18px 22px;
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-  }
-  .nav-btn {
-    background: var(--primary-light);
-    color: var(--primary);
-    border: none;
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    font-size: 18px;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  .nav-btn:hover {
-    background: var(--primary);
-    color: var(--bg);
-  }
-  .nav-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-    background: var(--card-hover);
-    color: var(--text-light);
-  }
-  .nav-btn:disabled:hover {
-    background: var(--card-hover);
-    color: var(--text-light);
-  }
-  .date-input {
-    border: 2px solid var(--border);
-    border-radius: 10px;
-    padding: 9px 14px;
-    font-size: 15px;
-    color: var(--text);
-    background: var(--bg);
-    font-family: inherit;
-    cursor: pointer;
-    outline: none;
-    transition: border-color 0.2s;
-    color-scheme: dark;
-  }
-  .date-input:focus {
-    border-color: var(--primary);
-  }
-  .today-btn {
-    background: transparent;
-    border: 1.5px solid var(--primary);
-    color: var(--primary);
-    padding: 8px 16px;
-    border-radius: 10px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  .today-btn:hover {
-    background: var(--primary);
-    color: var(--bg);
-  }
-  .date-label {
-    font-size: 17px;
-    font-weight: 600;
-    color: var(--text);
-    min-width: 120px;
-    text-align: center;
-  }
-
-  /* 卡片通用 */
-  .card {
-    background: var(--card);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    padding: 24px 26px;
-    margin-bottom: 22px;
-  }
-  .card-title {
-    font-size: 17px;
-    font-weight: 700;
-    margin-bottom: 18px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--text);
-  }
-  .card-title .icon {
-    color: var(--primary);
-    font-size: 20px;
-  }
-
-  /* 事项输入区 */
-  .item-input-row {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 16px;
-  }
-  .item-input {
-    flex: 1;
-    border: 2px solid var(--border);
-    border-radius: 10px;
-    padding: 11px 14px;
-    font-size: 15px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 0.2s;
-    color: var(--text);
-    background: var(--bg);
-  }
-  .item-input:focus {
-    border-color: var(--primary);
-  }
-  .item-input::placeholder {
-    color: var(--text-light);
-  }
-  .add-btn {
-    background: var(--primary);
-    color: var(--bg);
-    border: none;
-    padding: 0 22px;
-    border-radius: 10px;
-    font-size: 15px;
-    cursor: pointer;
-    transition: background 0.2s;
-    font-family: inherit;
-    white-space: nowrap;
-    font-weight: 600;
-  }
-  .add-btn:hover {
-    background: var(--primary-dark);
-  }
-
-  /* 事项列表表头 */
-  .item-table-header {
-    display: grid;
-    grid-template-columns: 40px 1fr 1fr 40px;
-    gap: 10px;
-    align-items: center;
-    padding: 6px 14px;
-    font-size: 13px;
-    color: var(--text-light);
-    font-weight: 600;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 10px;
-  }
-  .item-table-header span:nth-child(3) {
-    text-align: left;
-  }
-
-  /* 事项列表行 */
-  .item-list {
-    list-style: none;
-  }
-  .item-list li {
-    display: grid;
-    grid-template-columns: 40px 1fr 1fr 40px;
-    gap: 10px;
-    align-items: center;
-    padding: 10px 14px;
-    background: var(--bg);
-    border-radius: 10px;
-    margin-bottom: 8px;
-    border: 1px solid var(--border);
-    transition: all 0.2s;
-  }
-  .item-list li:hover {
-    border-color: var(--primary);
-  }
-  .item-checkbox {
-    width: 20px;
-    height: 20px;
-    cursor: pointer;
-    accent-color: var(--primary);
-    flex-shrink: 0;
-  }
-  .item-text {
-    font-size: 15px;
-    color: var(--text);
-    outline: none;
-    word-break: break-all;
-    padding: 4px 6px;
-    border-radius: 6px;
-    border: 1px solid transparent;
-    transition: all 0.2s;
-    cursor: text;
-    min-height: 28px;
-  }
-  .item-text:hover {
-    border-color: var(--border);
-  }
-  .item-text.done {
-    text-decoration: line-through;
-    color: var(--text-light);
-  }
-  .item-note-input {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 14px;
-    font-family: inherit;
-    outline: none;
-    color: var(--text);
-    background: var(--bg);
-    width: 100%;
-    transition: border-color 0.2s;
-  }
-  .item-note-input:focus {
-    border-color: var(--primary);
-  }
-  .item-note-input::placeholder {
-    color: var(--text-light);
-    opacity: 0.6;
-  }
-  .item-actions {
-    display: flex;
-    gap: 6px;
-    flex-shrink: 0;
-    justify-content: center;
-  }
-  .icon-btn {
-    background: transparent;
-    border: none;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 15px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-    color: var(--text-light);
-  }
-  .icon-btn.del:hover {
-    background: var(--danger-light);
-    color: var(--danger);
-  }
-
-  .empty-tip {
-    text-align: center;
-    color: var(--text-light);
-    font-size: 14px;
-    padding: 24px;
-    background: var(--bg);
-    border-radius: 10px;
-    border: 1px dashed var(--border);
-  }
-
-  /* 反思文本域 */
-  .reflect-area {
-    width: 100%;
-    min-height: 160px;
-    border: 2px solid var(--border);
-    border-radius: 10px;
-    padding: 14px;
-    font-size: 15px;
-    font-family: inherit;
-    resize: vertical;
-    outline: none;
-    color: var(--text);
-    background: var(--bg);
-    transition: border-color 0.2s;
-    line-height: 1.8;
-  }
-  .reflect-area:focus {
-    border-color: var(--primary);
-  }
-  .reflect-area::placeholder {
-    color: var(--text-light);
-    opacity: 0.6;
-  }
-  .char-count {
-    text-align: right;
-    font-size: 12px;
-    color: var(--text-light);
-    margin-top: 6px;
-  }
-
-  /* 每日金句 */
-  .quote-banner {
-    background: linear-gradient(135deg, #2a4d6e 0%, #1e3a52 100%);
-    color: var(--text);
-    border-radius: var(--radius);
-    padding: 26px 28px;
-    margin-bottom: 22px;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-    border: 1px solid #34556e;
-  }
-  .quote-banner::before {
-    content: "❝";
-    position: absolute;
-    top: 6px;
-    left: 16px;
-    font-size: 64px;
-    opacity: 0.15;
-    font-family: Georgia, serif;
-    line-height: 1;
-    color: var(--text);
-  }
-  .quote-text {
-    font-size: 18px;
-    line-height: 1.7;
-    font-weight: 500;
-    position: relative;
-    z-index: 1;
-    min-height: 30px;
-    transition: opacity 0.3s;
-    color: #d4dce6;
-  }
-  .quote-text.fade {
-    opacity: 0;
-  }
-  .quote-foot {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 14px;
-    position: relative;
-    z-index: 1;
-  }
-  .quote-date {
-    font-size: 13px;
-    color: var(--text-light);
-  }
-  .quote-refresh {
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.15);
-    color: var(--text);
-    padding: 6px 16px;
-    border-radius: 20px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  .quote-refresh:hover {
-    background: rgba(255,255,255,0.18);
-  }
-
-  /* 记账模块 */
-  .acc-form {
-    display: grid;
-    grid-template-columns: 100px 110px 1fr 1fr auto;
-    gap: 10px;
-    margin-bottom: 16px;
-    align-items: center;
-  }
-  .acc-input, .acc-select {
-    border: 2px solid var(--border);
-    border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 14px;
-    font-family: inherit;
-    outline: none;
-    transition: border-color 0.2s;
-    color: var(--text);
-    background: var(--bg);
-  }
-  .acc-input:focus, .acc-select:focus {
-    border-color: var(--primary);
-  }
-  .acc-input::placeholder {
-    color: var(--text-light);
-  }
-  .acc-type-select {
-    font-weight: 600;
-  }
-
-  .acc-list {
-    list-style: none;
-  }
-  .acc-list li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 11px 14px;
-    background: var(--bg);
-    border-radius: 10px;
-    margin-bottom: 8px;
-    border: 1px solid var(--border);
-    transition: all 0.2s;
-  }
-  .acc-list li:hover {
-    border-color: var(--primary);
-  }
-  .acc-badge {
-    font-size: 12px;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 20px;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-  .acc-badge.income {
-    background: var(--income-light);
-    color: var(--income);
-  }
-  .acc-badge.expense {
-    background: var(--expense-light);
-    color: var(--expense);
-  }
-  .acc-cat {
-    font-size: 13px;
-    color: var(--text-light);
-    flex-shrink: 0;
-    min-width: 50px;
-  }
-  .acc-amount {
-    font-size: 15px;
-    font-weight: 700;
-    flex-shrink: 0;
-    min-width: 70px;
-  }
-  .acc-amount.income { color: var(--income); }
-  .acc-amount.expense { color: var(--expense); }
-  .acc-note {
-    flex: 1;
-    font-size: 14px;
-    color: var(--text);
-    word-break: break-all;
-  }
-  .acc-note.empty {
-    color: var(--text-light);
-    font-style: italic;
-    opacity: 0.6;
-  }
-
-  .acc-summary {
-    display: flex;
-    gap: 12px;
-    margin-top: 16px;
-    flex-wrap: wrap;
-  }
-  .acc-summary-item {
-    flex: 1;
-    min-width: 130px;
-    text-align: center;
-    padding: 14px 10px;
-    border-radius: 10px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-  }
-  .acc-summary-item.income {
-    background: var(--income-light);
-    border-color: var(--income);
-  }
-  .acc-summary-item.expense {
-    background: var(--expense-light);
-    border-color: var(--expense);
-  }
-  .acc-summary-item.balance {
-    background: var(--primary-light);
-    border-color: var(--primary);
-  }
-  .acc-summary-label {
-    font-size: 13px;
-    color: var(--text-light);
-    margin-bottom: 4px;
-  }
-  .acc-summary-value {
-    font-size: 20px;
-    font-weight: 700;
-  }
-  .acc-summary-item.income .acc-summary-value { color: var(--income); }
-  .acc-summary-item.expense .acc-summary-value { color: var(--expense); }
-  .acc-summary-item.balance .acc-summary-value { color: var(--primary); }
-
-  /* 底部操作 */
-  .footer-actions {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
-  }
-  .save-status {
-    font-size: 13px;
-    color: var(--success);
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-  .save-status.show {
-    opacity: 1;
-  }
-  .danger-btn {
-    background: transparent;
-    border: 1.5px solid var(--danger);
-    color: var(--danger);
-    padding: 8px 18px;
-    border-radius: 10px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  .danger-btn:hover {
-    background: var(--danger);
-    color: var(--bg);
-  }
-
-  /* 历史记录概览 */
-  .history-list {
-    list-style: none;
-    max-height: 320px;
-    overflow-y: auto;
-  }
-  .history-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 14px;
-    border-radius: 10px;
-    margin-bottom: 8px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .history-list li:hover {
-    border-color: var(--primary);
-    background: var(--card-hover);
-  }
-  .history-date {
-    font-weight: 600;
-    color: var(--text);
-    font-size: 15px;
-  }
-  .history-count {
-    font-size: 13px;
-    color: var(--text-light);
-  }
-  .history-del {
-    background: transparent;
-    border: none;
-    color: var(--text-light);
-    cursor: pointer;
-    font-size: 16px;
-    padding: 4px 8px;
-    border-radius: 6px;
-    transition: all 0.2s;
-  }
-  .history-del:hover {
-    background: var(--danger-light);
-    color: var(--danger);
-  }
-
-  /* 确认弹窗 */
-  .modal-mask {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 1000;
-    align-items: center;
-    justify-content: center;
-  }
-  .modal-mask.show {
-    display: flex;
-  }
-  .modal-box {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 28px 30px;
-    max-width: 360px;
-    width: 90%;
-    text-align: center;
-    animation: pop 0.2s ease;
-  }
-  @keyframes pop {
-    from { transform: scale(0.9); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-  }
-  .modal-box p {
-    font-size: 16px;
-    margin-bottom: 22px;
-    color: var(--text);
-  }
-  .modal-btns {
-    display: flex;
-    gap: 12px;
-    justify-content: center;
-  }
-  .modal-btn {
-    padding: 9px 24px;
-    border-radius: 10px;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-    font-family: inherit;
-    transition: all 0.2s;
-  }
-  .modal-btn.cancel {
-    background: var(--card-hover);
-    color: var(--text-light);
-  }
-  .modal-btn.cancel:hover {
-    background: var(--border);
-    color: var(--text);
-  }
-  .modal-btn.confirm {
-    background: var(--danger);
-    color: var(--bg);
-  }
-  .modal-btn.confirm:hover {
-    background: #d04952;
-  }
-
-  /* Toast 提示 */
-  .toast {
-    position: fixed;
-    top: 24px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-80px);
-    background: var(--card-hover);
-    color: var(--text);
-    padding: 12px 26px;
-    border-radius: 10px;
-    font-size: 14px;
-    z-index: 2000;
-    transition: transform 0.3s ease;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-    border: 1px solid var(--border);
-  }
-  .toast.show {
-    transform: translateX(-50%) translateY(0);
-  }
-
-  /* 响应式 */
-  @media (max-width: 640px) {
-    .container { padding: 16px 12px 40px; }
-    .header h1 { font-size: 24px; }
-    .card { padding: 18px 16px; }
-    .date-label { min-width: auto; font-size: 15px; }
-    .date-bar { gap: 8px; padding: 14px 12px; }
-    .item-input-row { flex-direction: column; }
-    .add-btn { padding: 11px; }
-    .footer-actions { flex-direction: column; align-items: stretch; }
-    .footer-actions .danger-btn { width: 100%; }
-    .acc-form { grid-template-columns: 1fr 1fr; }
-    .acc-form .add-btn { grid-column: 1 / -1; padding: 11px; }
-    .quote-text { font-size: 16px; }
-    .acc-amount { min-width: 60px; }
-    /* 事项表格在小屏上标注列变窄 */
-    .item-table-header { grid-template-columns: 36px 1fr 1fr 36px; gap: 6px; }
-    .item-list li { grid-template-columns: 36px 1fr 1fr 36px; gap: 6px; }
-  }
-
-  @media (max-width: 480px) {
-    /* 超窄屏：标注列和内容列堆叠 */
-    .item-table-header { display: none; }
-    .item-list li {
-      grid-template-columns: 36px 1fr 36px;
-      grid-template-areas:
-        "check text del"
-        "note note note";
-      gap: 6px;
-    }
-    .item-list li .item-checkbox { grid-area: check; }
-    .item-list li .item-text { grid-area: text; }
-    .item-list li .item-note-input { grid-area: note; margin-top: 4px; }
-    .item-list li .item-actions { grid-area: del; }
-  }
-
-  /* 同步状态 & 设置 */
-  .top-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-  }
-  .sync-status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text-light);
-    background: var(--card);
-    padding: 8px 14px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    cursor: default;
-  }
-  .sync-status .sync-icon {
-    font-size: 16px;
-  }
-  .sync-status.synced .sync-icon { color: var(--success); }
-  .sync-status.syncing .sync-icon { color: var(--primary); }
-  .sync-status.offline .sync-icon { color: var(--text-light); }
-  .sync-status.error .sync-icon { color: var(--danger); }
-  .sync-btn {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text-light);
-    padding: 6px 14px;
-    border-radius: 20px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: inherit;
-  }
-  .sync-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-  }
-  .sync-btn:disabled {
-    opacity: 0.6;
-    cursor: wait;
-  }
-  .settings-btn {
-    background: var(--card);
-    border: 1px solid var(--border);
-    color: var(--text-light);
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-  }
-  .settings-btn:hover {
-    border-color: var(--primary);
-    color: var(--primary);
-  }
-
-  /* 设置弹窗 */
-  .config-modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 1100;
-    align-items: center;
-    justify-content: center;
-    overflow-y: auto;
-    padding: 20px;
-  }
-  .config-modal.show {
-    display: flex;
-  }
-  .config-box {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    padding: 28px 30px;
-    max-width: 520px;
-    width: 100%;
-    animation: pop 0.2s ease;
-  }
-  .config-box h3 {
-    font-size: 18px;
-    margin-bottom: 6px;
-    color: var(--text);
-  }
-  .config-box .config-desc {
-    font-size: 13px;
-    color: var(--text-light);
-    margin-bottom: 20px;
-    line-height: 1.6;
-  }
-  .config-box .config-desc a {
-    color: var(--primary);
-    text-decoration: none;
-  }
-  .config-field {
-    margin-bottom: 14px;
-  }
-  .config-field label {
-    display: block;
-    font-size: 13px;
-    color: var(--text-light);
-    margin-bottom: 5px;
-    font-weight: 600;
-  }
-  .config-field input {
-    width: 100%;
-    border: 2px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 12px;
-    font-size: 14px;
-    font-family: inherit;
-    outline: none;
-    color: var(--text);
-    background: var(--bg);
-    transition: border-color 0.2s;
-  }
-  .config-field input:focus {
-    border-color: var(--primary);
-  }
-  .config-field input::placeholder {
-    color: var(--text-light);
-    opacity: 0.5;
-  }
-  .config-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-end;
-    margin-top: 22px;
-    flex-wrap: wrap;
-  }
-  .config-btn {
-    padding: 10px 22px;
-    border-radius: 10px;
-    font-size: 14px;
-    cursor: pointer;
-    border: none;
-    font-family: inherit;
-    transition: all 0.2s;
-    font-weight: 600;
-  }
-  .config-btn.cancel {
-    background: var(--card-hover);
-    color: var(--text-light);
-  }
-  .config-btn.cancel:hover {
-    background: var(--border);
-    color: var(--text);
-  }
-  .config-btn.save {
-    background: var(--primary);
-    color: var(--bg);
-  }
-  .config-btn.save:hover {
-    background: var(--primary-dark);
-  }
-  .config-btn.danger {
-    background: transparent;
-    border: 1.5px solid var(--danger);
-    color: var(--danger);
-  }
-  .config-btn.danger:hover {
-    background: var(--danger);
-    color: var(--bg);
-  }
-  .config-btn.save:disabled {
-    opacity: 0.6;
-    cursor: wait;
-    background: var(--primary-dark);
-  }
-  .config-btn.save.loading::after {
-    content: " ⏳";
-    display: inline;
-  }
-  .config-btn.deploy {
-    background: var(--success);
-    color: var(--bg);
-    width: 100%;
-    margin-top: 14px;
-  }
-  .config-btn.deploy:hover {
-    background: #3d9a6f;
-  }
-  .config-btn.deploy:disabled {
-    opacity: 0.6;
-    cursor: wait;
-  }
-  .config-deploy-result {
-    display: none;
-    background: var(--income-light);
-    border: 1px solid var(--success);
-    border-radius: 8px;
-    padding: 14px;
-    margin-top: 14px;
-    font-size: 13px;
-    color: var(--text);
-    line-height: 1.7;
-    word-break: break-all;
-  }
-  .config-deploy-result.show {
-    display: block;
-  }
-  .config-deploy-result a {
-    color: var(--primary);
-    text-decoration: underline;
-    word-break: break-all;
-  }
-  .config-deploy-result .deploy-link {
-    display: block;
-    background: var(--bg);
-    padding: 8px 10px;
-    border-radius: 6px;
-    margin: 8px 0;
-    font-family: monospace;
-    font-size: 12px;
-    color: var(--primary);
-    word-break: break-all;
-  }
-  .config-warn {
-    display: none;
-    background: var(--danger-light);
-    border: 1px solid var(--danger);
-    border-radius: 8px;
-    padding: 12px 14px;
-    margin-bottom: 16px;
-    font-size: 13px;
-    color: var(--danger);
-    line-height: 1.6;
-  }
-  .config-warn.show {
-    display: block;
-  }
-  .config-section-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text);
-    margin: 20px 0 10px;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-  }
-
-  /* 首次提示引导 */
-  .guide-banner {
-    display: none;
-    background: var(--primary-light);
-    border: 1px solid var(--primary);
-    border-radius: var(--radius);
-    padding: 16px 20px;
-    margin-bottom: 22px;
-    align-items: center;
-    gap: 12px;
-    font-size: 14px;
-    color: var(--text);
-  }
-  .guide-banner.show {
-    display: flex;
-  }
-  .guide-banner .guide-text {
-    flex: 1;
-  }
-  .guide-banner .guide-btn {
-    background: var(--primary);
-    color: var(--bg);
-    border: none;
-    padding: 8px 18px;
-    border-radius: 8px;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-  .guide-banner .guide-close {
-    background: transparent;
-    border: none;
-    color: var(--text-light);
-    cursor: pointer;
-    font-size: 18px;
-    padding: 0 4px;
-  }
-
-  /* 滚动条美化 */
-  ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: #4a5150; }
-
-  /* iOS Safari 兼容性 */
-  /* 确保输入框在 iOS 上不自动缩放：font-size >= 16px */
-  @media (max-width: 640px) {
-    .item-input, .acc-input, .acc-select, .item-note-input,
-    .config-field input, .date-input, .reflect-area {
-      font-size: 16px;
-    }
-  }
-  /* -webkit-overflow-scrolling 确保弹窗内滚动流畅 */
-  .config-modal { -webkit-overflow-scrolling: touch; }
-  /* 确保 button 和 input 在 iOS 上不使用默认样式 */
-  button, input, textarea, select {
-    -webkit-appearance: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-  input[type="checkbox"] {
-    -webkit-appearance: auto;
-  }
-  /* 确保 grid 在旧 Safari 下有 flex 回退 */
-  @supports not (display: grid) {
-    .item-table-header, .item-list li {
-      display: flex;
-      flex-wrap: wrap;
-    }
-  }
+  @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="header">
-    <h1>📝 每日记事本</h1>
-    <p>记录每天的事项与反思，让每一天都有迹可循</p>
-  </div>
 
-  <!-- 顶部栏：同步状态 + 设置 -->
-  <div class="top-bar">
-    <div class="sync-status offline" id="syncStatus">
-      <span class="sync-icon" id="syncIcon">📵</span>
-      <span id="syncText">本地文件模式</span>
-      <button class="sync-btn" id="syncNowBtn" style="display:none;">立即同步</button>
-    </div>
-    <button class="settings-btn" id="settingsBtn" title="设置">⚙</button>
+<header>
+  <h1>📝 每日笔记 <span style="font-size:0.8rem; font-weight:400; color:#888">GitHub 版</span></h1>
+  <div class="btn-group">
+    <button onclick="app.syncNow()">🔄 同步</button>
+    <button onclick="ui.openSettings()">⚙️ 设置</button>
   </div>
+</header>
 
-  <!-- 首次配置引导 -->
-  <div class="guide-banner" id="guideBanner">
-    <span class="guide-text">💡 想要多设备数据同步？请配置 Gitee 云同步功能。</span>
-    <button class="guide-btn" id="guideSetupBtn">去配置</button>
-    <button class="guide-close" id="guideCloseBtn">✕</button>
-  </div>
-
-  <!-- 日期导航 -->
-  <div class="date-bar">
-    <button class="nav-btn" id="prevDay" title="前一天">‹</button>
-    <span class="date-label" id="dateLabel">今天 · 9月7日 周一</span>
-    <button class="nav-btn" id="nextDay" title="后一天" disabled="">›</button>
-    <input type="date" class="date-input" id="datePicker">
-    <button class="today-btn" id="todayBtn">回到今天</button>
-  </div>
-
-  <!-- 每日金句 -->
-  <div class="quote-banner">
-    <div class="quote-text" id="quoteText">学而不思则罔，思而不学则殆。</div>
-    <div class="quote-foot">
-      <span class="quote-date" id="quoteDate">今天 · 9月7日 周一</span>
-      <button class="quote-refresh" id="quoteRefresh">换一条 ↻</button>
-    </div>
-  </div>
-
-  <!-- 今日事项 -->
-  <div class="card">
-    <div class="card-title"><span class="icon">✓</span>今日事项</div>
-    <div class="item-input-row">
-      <input type="text" class="item-input" id="itemInput" placeholder="输入要做的事，按回车添加..." maxlength="200">
-      <button class="add-btn" id="addBtn">添加</button>
-    </div>
-    <div class="item-table-header" id="itemHeader" style="display:none;">
-      <span>完成</span>
-      <span>事项内容</span>
-      <span>标注</span>
-      <span>删除</span>
-    </div>
-    <ul class="item-list" id="itemList"></ul>
-    <div class="empty-tip" id="itemEmpty" style="display: block;">还没有添加任何事项，开始记录吧～</div>
-  </div>
-
-  <!-- 每日记账 -->
-  <div class="card">
-    <div class="card-title"><span class="icon">💰</span>每日收支</div>
-    <div class="acc-form">
-      <select class="acc-select acc-type-select" id="accType">
-        <option value="expense" class="expense">支出</option>
-        <option value="income" class="income">收入</option>
-      </select>
-      <select class="acc-select" id="accCategory">
-        <option value="餐饮">餐饮</option>
-        <option value="交通">交通</option>
-        <option value="购物">购物</option>
-        <option value="住房">住房</option>
-        <option value="娱乐">娱乐</option>
-        <option value="医疗">医疗</option>
-        <option value="教育">教育</option>
-        <option value="工资">工资</option>
-        <option value="奖金">奖金</option>
-        <option value="理财">理财</option>
-        <option value="人情">人情</option>
-        <option value="其他">其他</option>
-      </select>
-      <input type="number" class="acc-input" id="accAmount" placeholder="金额" min="0" step="0.01">
-      <input type="text" class="acc-input" id="accNote" placeholder="备注（选填）" maxlength="50">
-      <button class="add-btn" id="accAddBtn">添加</button>
-    </div>
-    <ul class="acc-list" id="accList"></ul>
-    <div class="empty-tip" id="accEmpty" style="display: block;">今天还没有记账记录～</div>
-    <div class="acc-summary" id="accSummary" style="display:none;">
-      <div class="acc-summary-item income">
-        <div class="acc-summary-label">收入合计</div>
-        <div class="acc-summary-value" id="accIncomeTotal">¥0.00</div>
-      </div>
-      <div class="acc-summary-item expense">
-        <div class="acc-summary-label">支出合计</div>
-        <div class="acc-summary-value" id="accExpenseTotal">¥0.00</div>
-      </div>
-      <div class="acc-summary-item balance">
-        <div class="acc-summary-label">结余</div>
-        <div class="acc-summary-value" id="accBalance">¥0.00</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- 每日总结反思 -->
-  <div class="card">
-    <div class="card-title"><span class="icon">✎</span>总结与反思</div>
-    <textarea class="reflect-area" id="reflectArea" placeholder="写下今天的收获、感悟或需要改进的地方..." maxlength="5000"></textarea>
-    <div class="char-count"><span id="charCount">0</span> / 5000</div>
-  </div>
-
-  <!-- 底部操作 -->
-  <div class="footer-actions">
-    <span class="save-status" id="saveStatus">✓ 已自动保存</span>
-    <button class="danger-btn" id="deleteDayBtn">删除当天记录</button>
-  </div>
-
-  <!-- 历史记录概览 -->
-  <div class="card" style="margin-top:22px;">
-    <div class="card-title"><span class="icon">🕑</span>历史记录</div>
-    <ul class="history-list" id="historyList"></ul>
-    <div class="empty-tip" id="historyEmpty" style="display: block;">暂无历史记录</div>
-  </div>
+<div class="control-bar">
+  <label>日期：</label>
+  <input type="date" id="dateInput">
 </div>
 
-<!-- 确认弹窗 -->
-<div class="modal-mask" id="modalMask">
-  <div class="modal-box">
-    <p id="modalText">确认删除？</p>
+<div class="editor-wrap">
+  <textarea id="editor" placeholder="今天发生了什么？..."></textarea>
+</div>
+
+<div class="status-bar">
+  <div class="sync-info">
+    <div id="syncDot" class="dot"></div>
+    <span id="syncText">等待连接</span>
+  </div>
+  <span id="lastAction">本地就绪</span>
+</div>
+
+<!-- 设置弹窗 -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h2>☁️ GitHub 同步配置</h2>
+    <div class="form-item">
+      <label>仓库路径 (Owner/Repo)</label>
+      <div style="display:flex; gap:5px;">
+        <input id="cfg-owner" type="text" placeholder="用户名" style="width:45%">
+        <input id="cfg-repo" type="text" placeholder="仓库名" style="width:55%">
+      </div>
+    </div>
+    <div class="form-item">
+      <label>Token (个人访问令牌)</label>
+      <input id="cfg-token" type="password" placeholder="ghp_xxxxxxxxxxxx">
+      <a href="https://github.com/settings/tokens" target="_blank" class="helper-link">🔗 点击获取 GitHub Token (需勾选 repo 权限)</a>
+    </div>
+    <div class="form-item" style="display:flex; gap:5px;">
+      <div style="flex:1">
+        <label>分支 (Branch)</label>
+        <input id="cfg-branch" type="text" value="main">
+      </div>
+      <div style="flex:1">
+        <label>文件名 (Path)</label>
+        <input id="cfg-path" type="text" value="notes-data.json">
+      </div>
+    </div>
     <div class="modal-btns">
-      <button class="modal-btn cancel" id="modalCancel">取消</button>
-      <button class="modal-btn confirm" id="modalConfirm">确认删除</button>
+      <button onclick="ui.closeSettings()">取消</button>
+      <button class="primary" onclick="app.saveConfig()">保存并启用</button>
     </div>
   </div>
 </div>
 
-<!-- Toast -->
-<div class="toast" id="toast">配置已保存（file:// 下云同步不可用）</div>
-
-<!-- Gitee 配置弹窗 -->
-<div class="config-modal show" id="configModal">
-  <div class="config-box">
-    <h3>⚙ Gitee 云同步设置</h3>
-    <p class="config-desc">
-      通过 Gitee 私有仓库实现多设备数据同步。<br>
-      需要先创建 Gitee 私有仓库并生成 Personal Access Token。<br>
-      参考：<a href="https://gitee.com/api/v5/swagger" target="_blank">Gitee API 文档</a>
-    </p>
-
-    <!-- file:// 协议或 Safari 兼容性警告 -->
-    <div class="config-warn show" id="configWarn">⚠ 当前通过本地文件（file://）打开，iOS Safari 会阻止跨域请求，云同步无法工作。建议将文件部署到网页服务器或通过网页链接访问。</div>
-
-    <div class="config-section-title">Gitee 仓库配置</div>
-    <div class="config-field">
-      <label>Gitee 用户名（owner）</label>
-      <input type="text" id="cfgOwner" placeholder="例如：myname" maxlength="50">
-    </div>
-    <div class="config-field">
-      <label>仓库名（repo）</label>
-      <input type="text" id="cfgRepo" placeholder="例如：my-diary-data" maxlength="50">
-    </div>
-    <div class="config-field">
-      <label>数据文件路径</label>
-      <input type="text" id="cfgFilePath" placeholder="diary-data.json" maxlength="100">
-    </div>
-    <div class="config-field">
-      <label>分支名（默认 master）</label>
-      <input type="text" id="cfgBranch" placeholder="master" maxlength="30">
-    </div>
-
-    <div class="config-section-title">认证</div>
-    <div class="config-field">
-      <label>Personal Access Token</label>
-      <input type="password" id="cfgToken" placeholder="在 Gitee 设置→私人令牌 中生成" maxlength="100">
-    </div>
-
-    <div class="config-actions">
-      <button class="config-btn danger" id="cfgClearBtn">清除配置</button>
-      <button class="config-btn cancel" id="cfgCancelBtn">取消</button>
-      <button class="config-btn save" id="cfgSaveBtn">保存并测试</button>
-    </div>
-
-    <div class="config-section-title">部署应用</div>
-    <p class="config-desc" style="margin-bottom:10px;">
-      将当前应用页面部署到 Gitee 仓库，生成 https 链接，方便在手机等设备上直接访问使用。
-    </p>
-    <button class="config-btn deploy" id="cfgDeployBtn">🚀 部署应用到仓库</button>
-    <div class="config-deploy-result" id="deployResult"></div>
-  </div>
-</div>
+<div id="toast" class="toast"></div>
 
 <script>
-(function() {
-  "use strict";
+/**
+ * GitHub 实时同步逻辑核心
+ */
+const app = {
+  data: {},
+  currentDate: new Date().toISOString().split('T')[0],
+  config: JSON.parse(localStorage.getItem('gh_sync_config') || 'null'),
+  isSyncing: false,
+  pushTimer: null,
 
-  var STORAGE_KEY = "daily_notepad_data_v1";
-  var data = {};       // { "2026-09-07": { items: [{text, done, note}], reflect: "", accounts: [] } }
-  var currentDate = ""; // 当前选中的日期 yyyy-mm-dd
-
-  // ========== DOM ==========
-  var datePicker = document.getElementById("datePicker");
-  var dateLabel = document.getElementById("dateLabel");
-  var prevDayBtn = document.getElementById("prevDay");
-  var nextDayBtn = document.getElementById("nextDay");
-  var todayBtn = document.getElementById("todayBtn");
-  var itemInput = document.getElementById("itemInput");
-  var addBtn = document.getElementById("addBtn");
-  var itemList = document.getElementById("itemList");
-  var itemEmpty = document.getElementById("itemEmpty");
-  var itemHeader = document.getElementById("itemHeader");
-  var reflectArea = document.getElementById("reflectArea");
-  var charCount = document.getElementById("charCount");
-  var saveStatus = document.getElementById("saveStatus");
-  var deleteDayBtn = document.getElementById("deleteDayBtn");
-  var historyList = document.getElementById("historyList");
-  var historyEmpty = document.getElementById("historyEmpty");
-  var modalMask = document.getElementById("modalMask");
-  var modalText = document.getElementById("modalText");
-  var modalCancel = document.getElementById("modalCancel");
-  var modalConfirm = document.getElementById("modalConfirm");
-  var toast = document.getElementById("toast");
-
-  // 金句 & 记账 DOM
-  var quoteText = document.getElementById("quoteText");
-  var quoteDate = document.getElementById("quoteDate");
-  var quoteRefresh = document.getElementById("quoteRefresh");
-  var accType = document.getElementById("accType");
-  var accCategory = document.getElementById("accCategory");
-  var accAmount = document.getElementById("accAmount");
-  var accNote = document.getElementById("accNote");
-  var accAddBtn = document.getElementById("accAddBtn");
-  var accList = document.getElementById("accList");
-  var accEmpty = document.getElementById("accEmpty");
-  var accSummary = document.getElementById("accSummary");
-  var accIncomeTotal = document.getElementById("accIncomeTotal");
-  var accExpenseTotal = document.getElementById("accExpenseTotal");
-  var accBalance = document.getElementById("accBalance");
-
-  // 同步 & 设置 DOM
-  var syncStatus = document.getElementById("syncStatus");
-  var syncIcon = document.getElementById("syncIcon");
-  var syncText = document.getElementById("syncText");
-  var syncNowBtn = document.getElementById("syncNowBtn");
-  var settingsBtn = document.getElementById("settingsBtn");
-  var guideBanner = document.getElementById("guideBanner");
-  var guideSetupBtn = document.getElementById("guideSetupBtn");
-  var guideCloseBtn = document.getElementById("guideCloseBtn");
-  var configModal = document.getElementById("configModal");
-  var cfgOwner = document.getElementById("cfgOwner");
-  var cfgRepo = document.getElementById("cfgRepo");
-  var cfgFilePath = document.getElementById("cfgFilePath");
-  var cfgBranch = document.getElementById("cfgBranch");
-  var cfgToken = document.getElementById("cfgToken");
-  var cfgSaveBtn = document.getElementById("cfgSaveBtn");
-  var cfgCancelBtn = document.getElementById("cfgCancelBtn");
-  var cfgClearBtn = document.getElementById("cfgClearBtn");
-  var configWarn = document.getElementById("configWarn");
-  var cfgDeployBtn = document.getElementById("cfgDeployBtn");
-  var deployResult = document.getElementById("deployResult");
-
-  // ========== Gitee API 云同步 ==========
-  var GITEE_CONFIG_KEY = "daily_notepad_gitee_config_v1";
-  var GITEE_GUIDE_KEY = "daily_notepad_guide_dismissed_v1";
-  var giteeConnected = false;
-  var giteeSyncTimer = null;   // debounce 写入定时器
-  var giteePullTimer = null;  // 定时拉取定时器
-  var giteeFileSha = null;    // 云端文件的 sha（更新时需要）
-  var giteePullInterval = 30000; // 30秒自动拉取
-
-  function getGiteeConfig() {
-    try {
-      var raw = localStorage.getItem(GITEE_CONFIG_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch (e) { return null; }
-  }
-
-  function saveGiteeConfig(config) {
-    localStorage.setItem(GITEE_CONFIG_KEY, JSON.stringify(config));
-  }
-
-  function clearGiteeConfig() {
-    localStorage.removeItem(GITEE_CONFIG_KEY);
-  }
-
-  // 同步状态更新
-  function setSyncStatus(state, text) {
-    syncStatus.className = "sync-status " + state;
-    var icons = { synced: "✅", syncing: "⏳", offline: "📵", error: "❌" };
-    syncIcon.textContent = icons[state] || "📵";
-    syncText.textContent = text || ({
-      synced: "已同步", syncing: "同步中…", offline: "离线模式", error: "同步失败"
-    }[state] || "未知");
-    syncNowBtn.style.display = (state === "synced" || state === "offline" || state === "error") && giteeConnected ? "inline-block" : "none";
-  }
-
-  // 构建 Gitee API 基础 URL
-  function giteeApiBase() {
-    var config = getGiteeConfig();
-    if (!config) return null;
-    return "https://gitee.com/api/v5/repos/" + encodeURIComponent(config.owner) + "/" + encodeURIComponent(config.repo) + "/contents/" + encodeURIComponent(config.filePath);
-  }
-
-  // 从 Gitee 拉取全部数据
-  function giteePull(callback) {
-    var config = getGiteeConfig();
-    if (!config || !config.owner || !config.repo || !config.token) {
-      if (callback) callback(false);
-      return;
-    }
-    setSyncStatus("syncing", "拉取云端数据…");
-    var url = giteeApiBase();
-    var params = "access_token=" + encodeURIComponent(config.token) + "&ref=" + encodeURIComponent(config.branch || "master");
-    fetch(url + "?" + params, {
-      method: "GET",
-      mode: "cors",
-      headers: { "Accept": "application/json" }
-    }).then(function(resp) {
-      if (resp.status === 404) {
-        // 文件不存在，首次使用，需要创建
-        giteeFileSha = null;
-        setSyncStatus("synced", "云端无数据");
-        if (callback) callback(true);
-        return null;
-      }
-      if (resp.status === 401) {
-        throw new Error("Token 无效");
-      }
-      if (resp.status === 403) {
-        throw new Error("无权限访问仓库");
-      }
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      return resp.json();
-    }).then(function(json) {
-      if (!json) return;
-      giteeFileSha = json.sha || null;
-      if (json.content) {
-        // base64 解码
-        var decoded = decodeBase64(json.content);
-        var cloudData = {};
-        try {
-          cloudData = JSON.parse(decoded) || {};
-        } catch (e) {
-          console.error("[Gitee] JSON 解析失败:", e);
-          cloudData = {};
-        }
-        // 合并：云端优先，但如果本地有未同步的日期数据则保留
-        var mergedData = {};
-        var allKeys = Object.keys(cloudData);
-        // 先放云端数据
-        allKeys.forEach(function(k) {
-          mergedData[k] = cloudData[k];
-        });
-        // 本地有但云端没有的日期，保留本地
-        Object.keys(data).forEach(function(k) {
-          if (!mergedData[k]) {
-            mergedData[k] = data[k];
-          }
-        });
-        data = mergedData;
-        // 数据兼容处理
-        Object.keys(data).forEach(function(k) {
-          if (!data[k].accounts) data[k].accounts = [];
-          if (!data[k].items) data[k].items = [];
-          data[k].items.forEach(function(it) {
-            if (it.note === undefined) it.note = "";
-          });
-        });
-        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
-      }
-      setSyncStatus("synced", "已同步");
-      if (callback) callback(true);
-    }).catch(function(err) {
-      console.error("[Gitee] 拉取失败:", err);
-      var msg = err && err.message ? err.message : "网络错误";
-      if (msg === "Failed to fetch" || msg.indexOf("Network") >= 0) {
-        msg = "网络请求失败（可能是跨域限制或网络不通）";
-        // 检测是否 file:// 协议
-        if (window.location.protocol === "file:") {
-          msg = "file:// 协议下无法发起跨域请求，请通过网页链接访问";
-        }
-      }
-      setSyncStatus("error", msg);
-      if (callback) callback(false);
-    });
-  }
-
-  // 推送全部数据到 Gitee
-  function giteePush(callback) {
-    var config = getGiteeConfig();
-    if (!config || !config.owner || !config.repo || !config.token) {
-      if (callback) callback(false);
-      return;
-    }
-    setSyncStatus("syncing", "推送中…");
-    var url = giteeApiBase();
-    var content = encodeBase64(JSON.stringify(data));
-    var bodyData = {
-      access_token: config.token,
-      content: content,
-      message: "diary-sync: " + new Date().toLocaleString("zh-CN"),
-      branch: config.branch || "master"
-    };
-    // 如果有 sha 则 PUT 更新，否则 POST 创建
-    var method = giteeFileSha ? "PUT" : "POST";
-    if (giteeFileSha) {
-      bodyData.sha = giteeFileSha;
-    }
-    fetch(url, {
-      method: method,
-      mode: "cors",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(bodyData)
-    }).then(function(resp) {
-      if (resp.status === 401) {
-        throw new Error("Token 无效");
-      }
-      if (resp.status === 403) {
-        throw new Error("无写入权限");
-      }
-      if (resp.status === 404) {
-        // 仓库或文件路径不存在
-        throw new Error("仓库或文件路径不存在");
-      }
-      if (!resp.ok) throw new Error("HTTP " + resp.status);
-      return resp.json();
-    }).then(function(json) {
-      if (json && json.content && json.content.sha) {
-        giteeFileSha = json.content.sha;
-      }
-      setSyncStatus("synced", "已同步");
-      if (callback) callback(true);
-    }).catch(function(err) {
-      console.error("[Gitee] 推送失败:", err);
-      var msg = err && err.message ? err.message : "推送失败";
-      if (msg === "Failed to fetch" || msg.indexOf("Network") >= 0) {
-        msg = "网络请求失败（可能是跨域限制）";
-        if (window.location.protocol === "file:") {
-          msg = "file:// 协议下无法发起跨域请求";
-        }
-      }
-      setSyncStatus("error", msg);
-      if (callback) callback(false);
-    });
-  }
-
-  // debounced 推送
-  function giteeSyncPush() {
-    if (!giteeConnected) return;
-    if (giteeSyncTimer) clearTimeout(giteeSyncTimer);
-    giteeSyncTimer = setTimeout(function() {
-      giteePush(function(success) {
-        if (success) {
-          // 推送成功后不需要额外操作
-        }
-      });
-    }, 2000);
-  }
-
-  // 手动立即同步（先拉取再推送）
-  function syncNow() {
-    if (!giteeConnected) {
-      showToast("未配置 Gitee 同步");
-      return;
-    }
-    if (giteeSyncTimer) { clearTimeout(giteeSyncTimer); giteeSyncTimer = null; }
-    syncNowBtn.disabled = true;
-    syncNowBtn.textContent = "同步中…";
-    giteePull(function(success) {
-      if (success) {
-        renderItems();
-        renderAccounts();
-        renderReflect();
-        renderHistory();
-        giteePush(function(ok) {
-          syncNowBtn.disabled = false;
-          syncNowBtn.textContent = "立即同步";
-          if (ok) showToast("同步成功");
-          else showToast("推送失败");
-        });
-      } else {
-        syncNowBtn.disabled = false;
-        syncNowBtn.textContent = "立即同步";
-        showToast("拉取失败");
-      }
-    });
-  }
-
-  // 启动定时拉取
-  function startAutoPull() {
-    stopAutoPull();
-    giteePullTimer = setInterval(function() {
-      giteePull(function(success) {
-        if (success) {
-          renderItems();
-          renderAccounts();
-          renderReflect();
-          renderHistory();
-        }
-      });
-    }, giteePullInterval);
-  }
-
-  function stopAutoPull() {
-    if (giteePullTimer) { clearInterval(giteePullTimer); giteePullTimer = null; }
-  }
-
-  // 测试 Gitee 连接
-  function initGitee() {
-    var config = getGiteeConfig();
-    if (!config || !config.owner || !config.repo || !config.token) {
-      giteeConnected = false;
-      setSyncStatus("offline", "离线模式");
-      stopAutoPull();
-      return false;
-    }
-    // file:// 协议下无法发起跨域请求
-    if (window.location.protocol === "file:" || typeof fetch === "undefined") {
-      giteeConnected = false;
-      setSyncStatus("offline", "本地文件模式");
-      stopAutoPull();
-      return false;
-    }
-    giteeConnected = true;
-    setSyncStatus("syncing", "连接中…");
-    // 尝试拉取数据
-    giteePull(function(success) {
-      if (success) {
-        renderItems();
-        renderAccounts();
-        renderReflect();
-        renderHistory();
-        startAutoPull();
-      }
-    });
-    return true;
-  }
-
-  // 打开/关闭配置弹窗
-  function openConfigModal() {
-    var config = getGiteeConfig() || {};
-    cfgOwner.value = config.owner || "";
-    cfgRepo.value = config.repo || "";
-    cfgFilePath.value = config.filePath || "diary-data.json";
-    cfgBranch.value = config.branch || "master";
-    cfgToken.value = config.token || "";
-    checkConfigWarnings();
-    // 重置部署结果区域
-    deployResult.classList.remove("show");
-    deployResult.innerHTML = "";
-    cfgDeployBtn.disabled = false;
-    cfgDeployBtn.textContent = "🚀 部署应用到仓库";
-    configModal.classList.add("show");
-  }
-
-  function closeConfigModal() {
-    configModal.classList.remove("show");
-  }
-
-  // 检测 file:// 协议和 Safari 兼容性问题，显示警告
-  function checkConfigWarnings() {
-    var warns = [];
-    // file:// 协议检测
-    if (window.location.protocol === "file:") {
-      warns.push("⚠ 当前通过本地文件（file://）打开，iOS Safari 会阻止跨域请求，云同步无法工作。建议将文件部署到网页服务器或通过网页链接访问。");
-    }
-    // 检测 fetch 是否可用
-    if (typeof fetch === "undefined") {
-      warns.push("⚠ 当前浏览器不支持 fetch API，云同步功能无法使用。");
-    }
-    if (warns.length > 0) {
-      configWarn.innerHTML = warns.join("<br>");
-      configWarn.classList.add("show");
+  init() {
+    document.getElementById('dateInput').value = this.currentDate;
+    this.loadLocal();
+    this.bindEvents();
+    
+    if (this.config) {
+      ui.updateStatus('synced', '已连接: ' + this.config.repo);
+      this.startAutoSync();
     } else {
-      configWarn.classList.remove("show");
+      ui.updateStatus('error', '未配置，请点击设置');
+      setTimeout(() => ui.openSettings(), 500);
     }
-  }
+  },
 
-  function saveConfig() {
-    var owner = cfgOwner.value.trim();
-    var repo = cfgRepo.value.trim();
-    var filePath = cfgFilePath.value.trim() || "diary-data.json";
-    var branch = cfgBranch.value.trim() || "master";
-    var token = cfgToken.value.trim();
-    if (!owner || !repo || !token) {
-      showToast("请填写用户名、仓库名和 Token");
-      return;
-    }
-    // file:// 协议检测：给出提示但仍允许保存
-    var isFileProtocol = window.location.protocol === "file:";
-    if (isFileProtocol) {
-      showToast("file:// 下云同步可能不可用，详见设置提示");
-    }
+  bindEvents() {
+    // 1. 切换日期
+    document.getElementById('dateInput').addEventListener('change', (e) => {
+      this.data[this.currentDate] = document.getElementById('editor').value;
+      this.currentDate = e.target.value;
+      this.renderEditor();
+    });
 
-    var config = {
-      owner: owner,
-      repo: repo,
-      filePath: filePath,
-      branch: branch,
-      token: token
+    // 2. 输入内容 (防抖推送)
+    document.getElementById('editor').addEventListener('input', () => {
+      const val = document.getElementById('editor').value;
+      this.data[this.currentDate] = val;
+      this.saveLocal();
+      document.getElementById('lastAction').textContent = '已保存至本地 ' + new Date().toLocaleTimeString();
+
+      clearTimeout(this.pushTimer);
+      if(this.config) {
+        ui.updateStatus('syncing', '准备推送...');
+        // 停止输入 3 秒后自动推送到 GitHub
+        this.pushTimer = setTimeout(() => this.pushToCloud(), 3000); 
+      }
+    });
+
+    // 3. 页面切换回前台时立即检查更新
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.config) this.pullFromCloud();
+    });
+  },
+
+  // --- 本地存储 ---
+  saveLocal() { localStorage.setItem('gh_notes_data', JSON.stringify(this.data)); },
+  loadLocal() {
+    const saved = localStorage.getItem('gh_notes_data');
+    this.data = saved ? JSON.parse(saved) : {};
+    this.renderEditor();
+  },
+  renderEditor() {
+    document.getElementById('editor').value = this.data[this.currentDate] || '';
+  },
+
+  // --- 配置管理 ---
+  saveConfig() {
+    const cfg = {
+      owner: document.getElementById('cfg-owner').value.trim(),
+      repo: document.getElementById('cfg-repo').value.trim(),
+      branch: document.getElementById('cfg-branch').value.trim() || 'main',
+      path: document.getElementById('cfg-path').value.trim() || 'notes-data.json',
+      token: document.getElementById('cfg-token').value.trim()
     };
-    saveGiteeConfig(config);
-    guideBanner.classList.remove("show");
 
-    // loading 状态
-    cfgSaveBtn.disabled = true;
-    cfgSaveBtn.classList.add("loading");
-    cfgSaveBtn.textContent = "测试中";
+    if (!cfg.owner || !cfg.repo || !cfg.token) return ui.toast('❌ 请填写完整信息');
 
-    // 如果是 file:// 协议或无 fetch，直接跳过测试
-    if (isFileProtocol || typeof fetch === "undefined") {
-      cfgSaveBtn.disabled = false;
-      cfgSaveBtn.classList.remove("loading");
-      cfgSaveBtn.textContent = "保存并测试";
-      closeConfigModal();
-      showToast("配置已保存（file:// 下云同步不可用）");
-      return;
-    }
+    this.config = cfg;
+    localStorage.setItem('gh_sync_config', JSON.stringify(cfg));
+    ui.closeSettings();
+    ui.toast('✅ 配置已保存');
+    this.startAutoSync();
+    this.pullFromCloud();
+  },
 
-    // 测试连接：尝试从 Gitee 拉取文件
-    testGiteeConnection(config, function(success, errMsg) {
-      cfgSaveBtn.disabled = false;
-      cfgSaveBtn.classList.remove("loading");
-      cfgSaveBtn.textContent = "保存并测试";
-      if (success) {
-        closeConfigModal();
-        showToast("连接成功！已开始云同步");
-        giteeConnected = true;
-        giteePull(function() {
-          renderItems();
-          renderAccounts();
-          renderReflect();
-          renderHistory();
-          startAutoPull();
-        });
-      } else {
-        showToast("连接失败: " + (errMsg || "未知错误"));
-        // 不关闭弹窗，让用户看到错误并修改
-      }
-    });
-  }
+  // --- GitHub API 同步逻辑 ---
+  startAutoSync() {
+    // 清理旧定时器
+    if (this.autoSyncInterval) clearInterval(this.autoSyncInterval);
+    // 每 5 秒检查一次云端（前台运行）
+    this.autoSyncInterval = setInterval(() => {
+      if (!document.hidden && !this.isSyncing) this.pullFromCloud();
+    }, 5000);
+  },
 
-  // 测试 Gitee 连接（独立函数，不依赖全局状态）
-  function testGiteeConnection(config, callback) {
-    var url = "https://gitee.com/api/v5/repos/" + encodeURIComponent(config.owner) + "/" + encodeURIComponent(config.repo) + "/contents/" + encodeURIComponent(config.filePath);
-    var params = "access_token=" + encodeURIComponent(config.token) + "&ref=" + encodeURIComponent(config.branch || "master");
-    fetch(url + "?" + params, {
-      method: "GET",
-      mode: "cors",
-      headers: { "Accept": "application/json" }
-    }).then(function(resp) {
-      if (resp.status === 404) {
-        // 文件不存在是正常的（首次使用），说明连接成功
-        if (callback) callback(true, null);
-        return null;
-      }
-      if (resp.status === 401) {
-        if (callback) callback(false, "Token 无效或已过期");
-        return null;
-      }
-      if (resp.status === 403) {
-        if (callback) callback(false, "无权限访问该仓库（请检查 Token 权限或仓库是否私有）");
-        return null;
-      }
-      if (resp.status === 404 && !config.repo) {
-        if (callback) callback(false, "仓库不存在");
-        return null;
-      }
-      if (!resp.ok) {
-        if (callback) callback(false, "HTTP " + resp.status);
-        return null;
-      }
-      return resp.json();
-    }).then(function(json) {
-      if (json && json.sha) {
-        giteeFileSha = json.sha;
-      }
-      if (callback) callback(true, null);
-    }).catch(function(err) {
-      var msg = err && err.message ? err.message : "网络错误";
-      // 区分 CORS / 网络错误
-      if (msg === "Failed to fetch" || msg === "NetworkError" || msg.indexOf("Network") >= 0) {
-        msg = "网络请求失败（可能是跨域限制或网络不通）";
-      }
-      if (callback) callback(false, msg);
-    });
-  }
+  async pushToCloud() {
+    if (!this.config) return;
+    this.isSyncing = true;
+    ui.updateStatus('syncing', '正在保存至云端...');
 
-  // 部署当前应用页面到 Gitee 仓库
-  function deployToGitee() {
-    var config = getGiteeConfig();
-    if (!config || !config.owner || !config.repo || !config.token) {
-      showToast("请先填写 Gitee 配置并保存");
-      return;
-    }
+    try {
+      // 1. 获取当前文件的 SHA
+      const { url, headers } = this.buildReq();
+      let sha = null;
+      const headRes = await fetch(url, { headers });
+      if (headRes.ok) {
+        const json = await headRes.json();
+        sha = json.sha;
+      } else if (headRes.status !== 404) throw new Error('网络异常');
 
-    // file:// 协议检测：提醒但不阻止
-    var isFileProtocol = window.location.protocol === "file:";
-    if (isFileProtocol) {
-      if (!confirm("当前为本地文件（file://）模式，API 请求可能被浏览器阻止。\n如果部署失败，请在有网络环境的浏览器（如 Chrome）上操作。\n\n是否继续尝试部署？")) {
-        return;
-      }
-    }
-
-    // 获取当前页面完整 HTML
-    var htmlContent = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
-    var encodedContent = encodeBase64(htmlContent);
-
-    var owner = config.owner;
-    var repo = config.repo;
-    var branch = config.branch || "master";
-    var token = config.token;
-    var filePath = "daily-notepad.html";
-    var baseUrl = "https://gitee.com/api/v5/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(repo) + "/contents/" + encodeURIComponent(filePath);
-
-    // loading 状态
-    cfgDeployBtn.disabled = true;
-    cfgDeployBtn.textContent = "部署中…⏳";
-    deployResult.classList.remove("show");
-
-    // 先 GET 检查文件是否存在
-    fetch(baseUrl + "?access_token=" + encodeURIComponent(token) + "&ref=" + encodeURIComponent(branch), {
-      method: "GET",
-      mode: "cors",
-      headers: { "Accept": "application/json" }
-    }).then(function(resp) {
-      if (resp.status === 404) {
-        // 文件不存在，POST 创建
-        return { _create: true, sha: null };
-      }
-      if (resp.status === 401) {
-        throw new Error("Token 无效或已过期");
-      }
-      if (resp.status === 403) {
-        throw new Error("无权限访问仓库");
-      }
-      if (!resp.ok) {
-        throw new Error("HTTP " + resp.status);
-      }
-      return resp.json().then(function(json) {
-        return { _create: false, sha: json.sha || null };
-      });
-    }).then(function(result) {
-      // 根据是否存在决定 POST 或 PUT
-      var method = result._create ? "POST" : "PUT";
-      var bodyData = {
-        access_token: token,
-        content: encodedContent,
-        message: "更新日记应用",
-        branch: branch
+      // 2. 推送内容
+      const body = {
+        message: 'Auto Sync: ' + this.currentDate,
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(this.data)))),
+        branch: this.config.branch
       };
-      if (!result._create && result.sha) {
-        bodyData.sha = result.sha;
-      }
+      if (sha) body.sha = sha; // 更新时必须带 SHA
 
-      return fetch(baseUrl, {
-        method: method,
-        mode: "cors",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify(bodyData)
-      }).then(function(resp) {
-        if (resp.status === 401) {
-          throw new Error("Token 无效");
-        }
-        if (resp.status === 403) {
-          throw new Error("无写入权限");
-        }
-        if (!resp.ok) {
-          throw new Error("HTTP " + resp.status);
-        }
-        return resp.json();
-      });
-    }).then(function(json) {
-      // 部署成功，显示 raw 链接
-      var rawUrl = "https://gitee.com/" + owner + "/" + repo + "/raw/" + branch + "/" + filePath;
-      var pagesUrl = "https://gitee.com/" + owner + "/" + repo + "/raw/" + branch + "/daily-notepad.html";
-
-      cfgDeployBtn.disabled = false;
-      cfgDeployBtn.textContent = "🚀 部署应用到仓库";
-
-      deployResult.innerHTML =
-        '<b>✅ 部署成功！</b><br>' +
-        '请用以下链接在手机或电脑浏览器打开使用：<br>' +
-        '<a href="' + pagesUrl + '" target="_blank" class="deploy-link">' + pagesUrl + '</a>' +
-        '<br>提示：长按链接可复制，或在手机浏览器中直接打开。';
-      deployResult.classList.add("show");
-
-      showToast("部署成功！");
-    }).catch(function(err) {
-      cfgDeployBtn.disabled = false;
-      cfgDeployBtn.textContent = "🚀 部署应用到仓库";
-
-      var msg = err && err.message ? err.message : "未知错误";
-      if (msg === "Failed to fetch" || msg.indexOf("Network") >= 0) {
-        if (isFileProtocol) {
-          msg = "网络请求失败：file:// 模式下浏览器可能阻止了跨域请求，请尝试在 Chrome 等浏览器上操作";
-        } else {
-          msg = "网络请求失败（可能是跨域限制或网络不通）";
-        }
-      }
-
-      deployResult.innerHTML = '<b style="color:var(--danger);">❌ 部署失败</b><br>' + msg;
-      deployResult.classList.add("show");
-      showToast("部署失败: " + msg);
-    });
-  }
-
-  function clearConfig() {
-    if (!confirm("确认清除 Gitee 配置？将切换回纯本地模式。")) return;
-    clearGiteeConfig();
-    giteeConnected = false;
-    giteeFileSha = null;
-    stopAutoPull();
-    setSyncStatus("offline", "离线模式");
-    closeConfigModal();
-    showToast("已清除配置，切换为本地模式");
-  }
-
-  // 检查是否需要显示首次引导
-  function checkGuideBanner() {
-    var dismissed = localStorage.getItem(GITEE_GUIDE_KEY);
-    var config = getGiteeConfig();
-    if (!dismissed && !config) {
-      guideBanner.classList.add("show");
-    }
-  }
-
-  function dismissGuide() {
-    localStorage.setItem(GITEE_GUIDE_KEY, "1");
-    guideBanner.classList.remove("show");
-  }
-
-  // 检测 localStorage 是否可用（Safari 无痕模式会不可用）
-  function isLocalStorageAvailable() {
-    try {
-      var testKey = "__test_ls__";
-      localStorage.setItem(testKey, "1");
-      localStorage.removeItem(testKey);
-      return true;
-    } catch (e) {
-      return false;
-    }
-  }
-
-  var localStorageAvailable = true;
-
-  // Base64 编解码（UTF-8 安全）
-  function encodeBase64(str) {
-    return btoa(unescape(encodeURIComponent(str)));
-  }
-  function decodeBase64(b64) {
-    // 去除换行符
-    b64 = (b64 || "").replace(/\n/g, "").replace(/\r/g, "");
-    try {
-      return decodeURIComponent(escape(atob(b64)));
-    } catch (e) {
-      try { return atob(b64); } catch (e2) { return ""; }
-    }
-  }
-
-  // ========== 金句库 ==========
-  var QUOTES = [
-    "千里之行，始于足下。",
-    "不积跬步，无以至千里；不积小流，无以成江海。",
-    "路漫漫其修远兮，吾将上下而求索。",
-    "天行健，君子以自强不息。",
-    "宝剑锋从磨砺出，梅花香自苦寒来。",
-    "业精于勤，荒于嬉；行成于思，毁于随。",
-    "锲而舍之，朽木不折；锲而不舍，金石可镂。",
-    "会当凌绝顶，一览众山小。",
-    "长风破浪会有时，直挂云帆济沧海。",
-    "欲穷千里目，更上一层楼。",
-    "黑发不知勤学早，白首方悔读书迟。",
-    "少壮不努力，老大徒伤悲。",
-    "纸上得来终觉浅，绝知此事要躬行。",
-    "山重水复疑无路，柳暗花明又一村。",
-    "沉舟侧畔千帆过，病树前头万木春。",
-    "勿以恶小而为之，勿以善小而不为。",
-    "海纳百川，有容乃大；壁立千仞，无欲则刚。",
-    "三军可夺帅也，匹夫不可夺志也。",
-    "富贵不能淫，贫贱不能移，威武不能屈。",
-    "天下难事，必作于易；天下大事，必作于细。",
-    "不患人之不己知，患不知人也。",
-    "敏而好学，不耻下问。",
-    "知之者不如好之者，好之者不如乐之者。",
-    "三人行，必有我师焉。",
-    "学而不思则罔，思而不学则殆。",
-    "温故而知新，可以为师矣。",
-    "工欲善其事，必先利其器。",
-    "君子坦荡荡，小人长戚戚。",
-    "不愤不启，不悱不发。",
-    "岁寒，然后知松柏之后凋也。",
-    "发愤忘食，乐以忘忧，不知老之将至。",
-    "君子欲讷于言而敏于行。",
-    "读万卷书，行万里路。",
-    "操千曲而后晓声，观千剑而后识器。"
-  ];
-  var manualQuoteOffset = -1;
-
-  // ========== 工具函数 ==========
-  function pad(n) { return n < 10 ? "0" + n : "" + n; }
-
-  function toDateStr(d) {
-    return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-  }
-
-  function parseDateStr(s) {
-    var parts = s.split("-");
-    return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-  }
-
-  function addDays(dateStr, delta) {
-    var d = parseDateStr(dateStr);
-    d.setDate(d.getDate() + delta);
-    return toDateStr(d);
-  }
-
-  function formatDateLabel(dateStr) {
-    var d = parseDateStr(dateStr);
-    var weekDays = ["日", "一", "二", "三", "四", "五", "六"];
-    var today = new Date();
-    var todayStr = toDateStr(today);
-    var prefix = "";
-    if (dateStr === todayStr) {
-      prefix = "今天 · ";
-    } else if (dateStr === addDays(todayStr, -1)) {
-      prefix = "昨天 · ";
-    } else if (dateStr === addDays(todayStr, 1)) {
-      prefix = "明天 · ";
-    }
-    return prefix + (d.getMonth() + 1) + "月" + d.getDate() + "日 周" + weekDays[d.getDay()];
-  }
-
-  // ========== 数据读写 ==========
-  function loadData() {
-    try {
-      var raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        data = JSON.parse(raw) || {};
-      }
-    } catch (e) {
-      data = {};
-    }
-  }
-
-  function saveData() {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-    } catch (e) {
-      // Safari 无痕模式或存储已满
-      if (!localStorageAvailable) {
-        // 静默处理，仅在有 Gitee 同步时不影响使用
+      const res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) });
+      
+      if (res.ok) {
+        ui.updateStatus('synced', '已同步到云端');
+        document.getElementById('lastAction').textContent = '已同步 ' + new Date().toLocaleTimeString();
       } else {
-        showToast("保存失败，存储空间可能已满");
+        const err = await res.json();
+        throw new Error(err.message || 'Push Failed');
       }
-    }
-    // 同步到 Gitee（debounced）
-    if (giteeConnected) {
-      giteeSyncPush();
-    }
-  }
+    } catch (e) {
+      console.error(e);
+      ui.updateStatus('error', '同步失败: ' + e.message);
+    } finally { this.isSyncing = false; }
+  },
 
-  function getRecord(dateStr) {
-    if (!data[dateStr]) {
-      data[dateStr] = { items: [], reflect: "", accounts: [] };
-    }
-    if (!data[dateStr].accounts) {
-      data[dateStr].accounts = [];
-    }
-    if (!data[dateStr].items) {
-      data[dateStr].items = [];
-    }
-    // 兼容旧数据：为没有 note 字段的事项补上
-    data[dateStr].items.forEach(function(it) {
-      if (it.note === undefined) it.note = "";
-    });
-    return data[dateStr];
-  }
+  async pullFromCloud() {
+    if (!this.config) return;
+    this.isSyncing = true;
+    
+    try {
+      const { url, headers } = this.buildReq();
+      const res = await fetch(url, { headers });
 
-  // ========== 渲染 ==========
-  function renderItems() {
-    var record = getRecord(currentDate);
-    itemList.innerHTML = "";
-    if (!record.items || record.items.length === 0) {
-      itemEmpty.style.display = "block";
-      itemHeader.style.display = "none";
-    } else {
-      itemEmpty.style.display = "none";
-      itemHeader.style.display = "grid";
-      record.items.forEach(function(item, idx) {
-        var li = document.createElement("li");
-
-        // 复选框
-        var cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.className = "item-checkbox";
-        cb.checked = !!item.done;
-        cb.addEventListener("change", function() {
-          record.items[idx].done = cb.checked;
-          saveData();
-          renderItems();
-          renderHistory();
-        });
-
-        // 文本（点击进入编辑模式）
-        var span = document.createElement("span");
-        span.className = "item-text" + (item.done ? " done" : "");
-        span.textContent = item.text;
-        span.title = "点击编辑";
-        span.addEventListener("click", function() {
-          enterEditMode(span, idx);
-        });
-
-        // 标注输入框
-        var noteInput = document.createElement("input");
-        noteInput.type = "text";
-        noteInput.className = "item-note-input";
-        noteInput.value = item.note || "";
-        noteInput.maxLength = 100;
-        updateNotePlaceholder(noteInput, item.done);
-        noteInput.addEventListener("input", function() {
-          record.items[idx].note = noteInput.value;
-          saveData();
-        });
-        noteInput.addEventListener("focus", function() {
-          // 勾选完成时改变 placeholder
-        });
-
-        // 删除按钮
-        var delBtn = document.createElement("button");
-        delBtn.className = "icon-btn del";
-        delBtn.title = "删除";
-        delBtn.innerHTML = "✕";
-        delBtn.addEventListener("click", function() {
-          record.items.splice(idx, 1);
-          saveData();
-          renderItems();
-          renderHistory();
-        });
-
-        li.appendChild(cb);
-        li.appendChild(span);
-        li.appendChild(noteInput);
-        var actions = document.createElement("div");
-        actions.className = "item-actions";
-        actions.appendChild(delBtn);
-        li.appendChild(actions);
-        itemList.appendChild(li);
-      });
-    }
-  }
-
-  function updateNotePlaceholder(inputEl, done) {
-    if (done) {
-      inputEl.placeholder = "备注（选填）";
-    } else {
-      inputEl.placeholder = "未完成原因…";
-    }
-  }
-
-  function enterEditMode(span, idx) {
-    var record = getRecord(currentDate);
-    var oldText = record.items[idx].text;
-    var input = document.createElement("input");
-    input.type = "text";
-    input.className = "item-note-input";
-    input.value = oldText;
-    input.style.width = "100%";
-    input.maxLength = 200;
-    span.parentNode.replaceChild(input, span);
-    input.focus();
-    input.select();
-
-    function commit() {
-      var newText = input.value.trim();
-      if (newText) {
-        record.items[idx].text = newText;
+      if (res.ok) {
+        const json = await res.json();
+        const content = JSON.parse(decodeURIComponent(escape(atob(json.content))));
+        
+        // 如果云端数据更新，覆盖本地内存
+        // 注意：这里采用“云端优先”策略，防止多端冲突
+        if (JSON.stringify(content) !== JSON.stringify(this.data)) {
+           this.data = content;
+           this.saveLocal();
+           this.renderEditor();
+           ui.toast('📥 已从云端拉取最新数据');
+        }
+        ui.updateStatus('synced', '数据已是最新');
+      } else if (res.status === 404) {
+        // 云端无文件，尝试首次推送
+        ui.updateStatus('synced', '云端为空，将自动创建');
+        this.pushToCloud();
       } else {
-        record.items.splice(idx, 1);
+        throw new Error('HTTP ' + res.status);
       }
-      saveData();
-      renderItems();
-      renderHistory();
-    }
+    } catch (e) {
+      // 静默失败，不弹窗打扰用户，仅更新状态灯
+      ui.updateStatus('error', '拉取异常');
+    } finally { this.isSyncing = false; }
+  },
 
-    input.addEventListener("blur", commit);
-    input.addEventListener("keydown", function(e) {
-      if (e.key === "Enter") { e.preventDefault(); input.blur(); }
-      if (e.key === "Escape") { input.value = oldText; input.blur(); }
-    });
+  syncNow() {
+    if(!this.config) return ui.openSettings();
+    this.pullFromCloud();
+    this.pushToCloud();
+  },
+
+  buildReq() {
+    const c = this.config;
+    return {
+      url: `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}?ref=${c.branch}`,
+      headers: { 'Authorization': `token ${c.token}`, 'Accept': 'application/vnd.github.v3+json' }
+    };
   }
+};
 
-  function renderReflect() {
-    var record = getRecord(currentDate);
-    reflectArea.value = record.reflect || "";
-    updateCharCount();
+const ui = {
+  openSettings() { document.getElementById('settingsModal').style.display = 'flex'; },
+  closeSettings() { document.getElementById('settingsModal').style.display = 'none'; },
+  updateStatus(state, text) {
+    const dot = document.getElementById('syncDot');
+    const txt = document.getElementById('syncText');
+    dot.className = 'dot ' + state;
+    txt.textContent = text;
+  },
+  toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
   }
+};
 
-  function updateCharCount() {
-    charCount.textContent = reflectArea.value.length;
-  }
-
-  // ========== 金句渲染 ==========
-  function getQuoteIndexForDate(dateStr) {
-    var sum = 0;
-    for (var i = 0; i < dateStr.length; i++) {
-      sum += dateStr.charCodeAt(i);
-    }
-    return sum % QUOTES.length;
-  }
-
-  function renderQuote() {
-    var idx;
-    if (manualQuoteOffset >= 0) {
-      idx = manualQuoteOffset;
-    } else {
-      idx = getQuoteIndexForDate(currentDate);
-    }
-    quoteText.classList.add("fade");
-    setTimeout(function() {
-      quoteText.textContent = QUOTES[idx];
-      quoteDate.textContent = formatDateLabel(currentDate);
-      quoteText.classList.remove("fade");
-    }, 150);
-  }
-
-  function refreshQuote() {
-    if (manualQuoteOffset < 0) {
-      manualQuoteOffset = getQuoteIndexForDate(currentDate);
-    }
-    manualQuoteOffset = (manualQuoteOffset + 1) % QUOTES.length;
-    renderQuote();
-  }
-
-  // ========== 记账渲染 ==========
-  function formatMoney(n) {
-    return "¥" + Number(n).toFixed(2);
-  }
-
-  function renderAccounts() {
-    var record = getRecord(currentDate);
-    accList.innerHTML = "";
-    var accs = record.accounts || [];
-    if (accs.length === 0) {
-      accEmpty.style.display = "block";
-      accSummary.style.display = "none";
-      return;
-    }
-    accEmpty.style.display = "none";
-    accSummary.style.display = "flex";
-
-    var income = 0, expense = 0;
-    accs.forEach(function(acc, idx) {
-      var li = document.createElement("li");
-
-      var badge = document.createElement("span");
-      badge.className = "acc-badge " + acc.type;
-      badge.textContent = acc.type === "income" ? "收入" : "支出";
-
-      var cat = document.createElement("span");
-      cat.className = "acc-cat";
-      cat.textContent = acc.category;
-
-      var amount = document.createElement("span");
-      amount.className = "acc-amount " + acc.type;
-      amount.textContent = (acc.type === "income" ? "+" : "-") + formatMoney(acc.amount);
-
-      var note = document.createElement("span");
-      note.className = "acc-note" + (acc.note && acc.note.trim() ? "" : " empty");
-      note.textContent = acc.note && acc.note.trim() ? acc.note : "无备注";
-
-      var delBtn = document.createElement("button");
-      delBtn.className = "icon-btn del";
-      delBtn.title = "删除";
-      delBtn.innerHTML = "✕";
-      delBtn.addEventListener("click", function() {
-        record.accounts.splice(idx, 1);
-        saveData();
-        renderAccounts();
-        renderHistory();
-      });
-
-      li.appendChild(badge);
-      li.appendChild(cat);
-      li.appendChild(amount);
-      li.appendChild(note);
-      var actions = document.createElement("div");
-      actions.className = "item-actions";
-      actions.appendChild(delBtn);
-      li.appendChild(actions);
-      accList.appendChild(li);
-
-      if (acc.type === "income") {
-        income += Number(acc.amount) || 0;
-      } else {
-        expense += Number(acc.amount) || 0;
-      }
-    });
-
-    accIncomeTotal.textContent = formatMoney(income);
-    accExpenseTotal.textContent = formatMoney(expense);
-    accBalance.textContent = formatMoney(income - expense);
-  }
-
-  function addAccount() {
-    var amount = parseFloat(accAmount.value);
-    if (isNaN(amount) || amount <= 0) {
-      showToast("请输入有效金额");
-      accAmount.focus();
-      return;
-    }
-    var record = getRecord(currentDate);
-    record.accounts.push({
-      type: accType.value,
-      category: accCategory.value,
-      amount: amount,
-      note: accNote.value.trim()
-    });
-    accAmount.value = "";
-    accNote.value = "";
-    saveData();
-    renderAccounts();
-    renderHistory();
-    accAmount.focus();
-  }
-
-  function renderDate() {
-    dateLabel.textContent = formatDateLabel(currentDate);
-    datePicker.value = currentDate;
-    var todayStr = toDateStr(new Date());
-    nextDayBtn.disabled = (currentDate >= todayStr);
-  }
-
-  function renderHistory() {
-    historyList.innerHTML = "";
-    var keys = Object.keys(data).sort().reverse();
-    var validKeys = keys.filter(function(k) {
-      var r = data[k];
-      return r && ((r.items && r.items.length > 0) || (r.reflect && r.reflect.trim()) || (r.accounts && r.accounts.length > 0));
-    });
-    if (validKeys.length === 0) {
-      historyEmpty.style.display = "block";
-      return;
-    }
-    historyEmpty.style.display = "none";
-    validKeys.forEach(function(key) {
-      var r = data[key];
-      var li = document.createElement("li");
-
-      var left = document.createElement("div");
-      var dateDiv = document.createElement("div");
-      dateDiv.className = "history-date";
-      dateDiv.textContent = formatDateLabel(key);
-      var countDiv = document.createElement("div");
-      countDiv.className = "history-count";
-      var doneCount = 0;
-      if (r.items) {
-        doneCount = r.items.filter(function(it) { return it.done; }).length;
-      }
-      var parts = [];
-      if (r.items && r.items.length > 0) {
-        parts.push(r.items.length + " 项事项（完成 " + doneCount + "）");
-      }
-      if (r.accounts && r.accounts.length > 0) {
-        var inc = 0, exp = 0;
-        r.accounts.forEach(function(a) {
-          if (a.type === "income") inc += Number(a.amount) || 0;
-          else exp += Number(a.amount) || 0;
-        });
-        parts.push("收支 " + r.accounts.length + " 笔（结余 ¥" + (inc - exp).toFixed(2) + "）");
-      }
-      if (r.reflect && r.reflect.trim()) {
-        parts.push("有反思");
-      }
-      countDiv.textContent = parts.join(" · ");
-
-      left.appendChild(dateDiv);
-      left.appendChild(countDiv);
-      li.appendChild(left);
-
-      li.addEventListener("click", function(e) {
-        if (e.target === delBtn) return;
-        currentDate = key;
-        manualQuoteOffset = -1;
-        renderAll();
-      });
-
-      var delBtn = document.createElement("button");
-      delBtn.className = "history-del";
-      delBtn.title = "删除该天记录";
-      delBtn.innerHTML = "✕";
-      delBtn.addEventListener("click", function(e) {
-        e.stopPropagation();
-        showConfirm("确认删除 " + formatDateLabel(key) + " 的记录？", function() {
-          delete data[key];
-          saveData();
-          if (currentDate === key) {
-            currentDate = toDateStr(new Date());
-          }
-          renderAll();
-          showToast("已删除该天记录");
-        });
-      });
-
-      li.appendChild(delBtn);
-      historyList.appendChild(li);
-    });
-  }
-
-  function renderAll() {
-    renderDate();
-    renderQuote();
-    renderItems();
-    renderAccounts();
-    renderReflect();
-    renderHistory();
-  }
-
-  // ========== 事项操作 ==========
-  function addItem() {
-    var text = itemInput.value.trim();
-    if (!text) return;
-    var record = getRecord(currentDate);
-    record.items.push({ text: text, done: false, note: "" });
-    itemInput.value = "";
-    saveData();
-    renderItems();
-    renderHistory();
-    itemInput.focus();
-  }
-
-  // ========== 反思自动保存 ==========
-  var reflectTimer = null;
-  function onReflectInput() {
-    updateCharCount();
-    if (reflectTimer) clearTimeout(reflectTimer);
-    reflectTimer = setTimeout(function() {
-      var record = getRecord(currentDate);
-      record.reflect = reflectArea.value;
-      saveData();
-      showSaveStatus();
-      renderHistory();
-    }, 600);
-  }
-
-  function showSaveStatus() {
-    saveStatus.classList.add("show");
-    setTimeout(function() {
-      saveStatus.classList.remove("show");
-    }, 1500);
-  }
-
-  // ========== 日期切换 ==========
-  function changeDate(delta) {
-    currentDate = addDays(currentDate, delta);
-    manualQuoteOffset = -1;
-    renderAll();
-  }
-
-  function gotoToday() {
-    currentDate = toDateStr(new Date());
-    manualQuoteOffset = -1;
-    renderAll();
-  }
-
-  // ========== 删除当天 ==========
-  function deleteCurrentDay() {
-    showConfirm("确认删除 " + formatDateLabel(currentDate) + " 的全部记录？此操作不可恢复。", function() {
-      delete data[currentDate];
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch (e) {}
-      // 同步到 Gitee（debounced）
-      if (giteeConnected) {
-        giteeSyncPush();
-      }
-      currentDate = toDateStr(new Date());
-      renderAll();
-      showToast("已删除当天记录");
-    });
-  }
-
-  // ========== 弹窗 ==========
-  var modalCallback = null;
-  function showConfirm(msg, callback) {
-    modalText.textContent = msg;
-    modalCallback = callback;
-    modalMask.classList.add("show");
-  }
-  function hideModal() {
-    modalMask.classList.remove("show");
-    modalCallback = null;
-  }
-
-  // ========== Toast ==========
-  var toastTimer = null;
-  function showToast(msg) {
-    toast.textContent = msg;
-    toast.classList.add("show");
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(function() {
-      toast.classList.remove("show");
-    }, 2000);
-  }
-
-  // ========== 事件绑定 ==========
-  addBtn.addEventListener("click", addItem);
-  itemInput.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") { e.preventDefault(); addItem(); }
-  });
-  reflectArea.addEventListener("input", onReflectInput);
-  quoteRefresh.addEventListener("click", refreshQuote);
-  accAddBtn.addEventListener("click", addAccount);
-  accAmount.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") { e.preventDefault(); addAccount(); }
-  });
-  accNote.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") { e.preventDefault(); addAccount(); }
-  });
-  prevDayBtn.addEventListener("click", function() { changeDate(-1); });
-  nextDayBtn.addEventListener("click", function() { changeDate(1); });
-  todayBtn.addEventListener("click", gotoToday);
-  datePicker.addEventListener("change", function() {
-    if (datePicker.value) {
-      currentDate = datePicker.value;
-      manualQuoteOffset = -1;
-      renderAll();
-    }
-  });
-  deleteDayBtn.addEventListener("click", deleteCurrentDay);
-  modalCancel.addEventListener("click", hideModal);
-  modalConfirm.addEventListener("click", function() {
-    if (typeof modalCallback === "function") modalCallback();
-    hideModal();
-  });
-  modalMask.addEventListener("click", function(e) {
-    if (e.target === modalMask) hideModal();
-  });
-
-  // Gitee 设置事件
-  settingsBtn.addEventListener("click", openConfigModal);
-  cfgSaveBtn.addEventListener("click", saveConfig);
-  cfgCancelBtn.addEventListener("click", closeConfigModal);
-  cfgClearBtn.addEventListener("click", clearConfig);
-  cfgDeployBtn.addEventListener("click", deployToGitee);
-  configModal.addEventListener("click", function(e) {
-    if (e.target === configModal) closeConfigModal();
-  });
-  guideSetupBtn.addEventListener("click", function() {
-    dismissGuide();
-    openConfigModal();
-  });
-  guideCloseBtn.addEventListener("click", dismissGuide);
-  syncNowBtn.addEventListener("click", syncNow);
-  // 网络状态监听
-  window.addEventListener("online", function() {
-    if (getGiteeConfig() && window.location.protocol !== "file:") {
-      initGitee();
-    }
-  });
-  window.addEventListener("offline", function() {
-    stopAutoPull();
-    setSyncStatus("offline", "离线模式");
-  });
-
-  // 键盘快捷键：左右箭头切换日期
-  document.addEventListener("keydown", function(e) {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
-    if (e.altKey || e.ctrlKey || e.metaKey) return;
-    if (e.key === "ArrowLeft") { e.preventDefault(); changeDate(-1); }
-    if (e.key === "ArrowRight") { if (!nextDayBtn.disabled) { e.preventDefault(); changeDate(1); } }
-  });
-
-  // ========== 初始化 ==========
-  // 检测 localStorage 可用性（Safari 无痕模式）
-  localStorageAvailable = isLocalStorageAvailable();
-  if (!localStorageAvailable) {
-    showToast("⚠ 浏览器存储不可用（可能处于无痕模式），数据不会保存");
-  }
-  loadData();
-  currentDate = toDateStr(new Date());
-  renderAll();
-  // 检查 Gitee 配置并初始化
-  initGitee();
-  checkGuideBanner();
-})();
+// 启动
+window.onload = () => app.init();
 </script>
-
-
-</body></html>
+</body>
