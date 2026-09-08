@@ -1,0 +1,327 @@
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GitHub 每日笔记 | 实时同步</title>
+<style>
+  :root {
+    --bg: #f4f6f8;
+    --card: #ffffff;
+    --text-main: #2c3e50;
+    --text-sec: #7f8c8d;
+    --primary: #0366d6; /* GitHub Blue */
+    --success: #28a745;
+    --warning: #ffc107;
+    --error: #dc3545;
+    --border: #e1e4e8;
+    --radius: 8px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; outline: none; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; height: 100vh; display: flex; flex-direction: column; padding: 15px; }
+  
+  /* 顶部导航 */
+  header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 15px; border-bottom: 1px solid var(--border); margin-bottom: 15px; }
+  h1 { font-size: 1.1rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .btn-group { display: flex; gap: 8px; }
+  button { border: none; background: var(--card); color: var(--text-main); padding: 8px 12px; border-radius: var(--radius); cursor: pointer; font-size: 0.9rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: 0.2s; }
+  button:active { transform: scale(0.96); }
+  button.primary { background: var(--primary); color: white; }
+
+  /* 日期与编辑器 */
+  .control-bar { display: flex; gap: 10px; margin-bottom: 15px; align-items: center; }
+  input[type="date"] { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 1rem; background: var(--card); }
+  .editor-wrap { flex: 1; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 15px; display: flex; flex-direction: column; overflow: hidden; }
+  textarea { width: 100%; height: 100%; border: none; resize: none; font-size: 1.05rem; line-height: 1.6; color: var(--text-main); background: transparent; font-family: inherit; }
+  
+  /* 状态栏 */
+  .status-bar { margin-top: 15px; padding: 10px 15px; background: var(--card); border-radius: var(--radius); display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: var(--text-sec); box-shadow: var(--shadow); }
+  .sync-info { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+  .dot.syncing { background: var(--warning); animation: pulse 1s infinite; }
+  .dot.synced { background: var(--success); }
+  .dot.error { background: var(--error); }
+  
+  /* 模态框 */
+  .modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.4); z-index: 1000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(2px); }
+  .modal { background: var(--card); width: 90%; max-width: 400px; padding: 25px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+  .modal h2 { margin-bottom: 20px; font-size: 1.2rem; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+  .form-item { margin-bottom: 15px; }
+  .form-item label { display: block; font-size: 0.9rem; margin-bottom: 5px; color: var(--text-sec); }
+  .form-item input, .form-item select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 1rem; }
+  .modal-btns { display: flex; gap: 10px; margin-top: 20px; }
+  .modal-btns button { flex: 1; padding: 12px; }
+  .helper-link { display: block; margin-top: 5px; font-size: 0.8rem; color: var(--primary); text-decoration: none; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px; font-size: 0.9rem; z-index: 2000; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+
+  @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>📝 每日笔记 <span style="font-size:0.8rem; font-weight:400; color:#888">GitHub 版</span></h1>
+  <div class="btn-group">
+    <button onclick="app.syncNow()">🔄 同步</button>
+    <button onclick="ui.openSettings()">⚙️ 设置</button>
+  </div>
+</header>
+
+<div class="control-bar">
+  <label>日期：</label>
+  <input type="date" id="dateInput">
+</div>
+
+<div class="editor-wrap">
+  <textarea id="editor" placeholder="今天发生了什么？..."></textarea>
+</div>
+
+<div class="status-bar">
+  <div class="sync-info">
+    <div id="syncDot" class="dot"></div>
+    <span id="syncText">等待连接</span>
+  </div>
+  <span id="lastAction">本地就绪</span>
+</div>
+
+<!-- 设置弹窗 -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h2>☁️ GitHub 同步配置</h2>
+    <div class="form-item">
+      <label>仓库路径 (Owner/Repo)</label>
+      <div style="display:flex; gap:5px;">
+        <input id="cfg-owner" type="text" placeholder="用户名" style="width:45%">
+        <input id="cfg-repo" type="text" placeholder="仓库名" style="width:55%">
+      </div>
+    </div>
+    <div class="form-item">
+      <label>Token (个人访问令牌)</label>
+      <input id="cfg-token" type="password" placeholder="ghp_xxxxxxxxxxxx">
+      <a href="https://github.com/settings/tokens" target="_blank" class="helper-link">🔗 点击获取 GitHub Token (需勾选 repo 权限)</a>
+    </div>
+    <div class="form-item" style="display:flex; gap:5px;">
+      <div style="flex:1">
+        <label>分支 (Branch)</label>
+        <input id="cfg-branch" type="text" value="main">
+      </div>
+      <div style="flex:1">
+        <label>文件名 (Path)</label>
+        <input id="cfg-path" type="text" value="notes-data.json">
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button onclick="ui.closeSettings()">取消</button>
+      <button class="primary" onclick="app.saveConfig()">保存并启用</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script>
+/**
+ * GitHub 实时同步逻辑核心
+ */
+const app = {
+  data: {},
+  currentDate: new Date().toISOString().split('T')[0],
+  config: JSON.parse(localStorage.getItem('gh_sync_config') || 'null'),
+  isSyncing: false,
+  pushTimer: null,
+
+  init() {
+    document.getElementById('dateInput').value = this.currentDate;
+    this.loadLocal();
+    this.bindEvents();
+    
+    if (this.config) {
+      ui.updateStatus('synced', '已连接: ' + this.config.repo);
+      this.startAutoSync();
+    } else {
+      ui.updateStatus('error', '未配置，请点击设置');
+      setTimeout(() => ui.openSettings(), 500);
+    }
+  },
+
+  bindEvents() {
+    // 1. 切换日期
+    document.getElementById('dateInput').addEventListener('change', (e) => {
+      this.data[this.currentDate] = document.getElementById('editor').value;
+      this.currentDate = e.target.value;
+      this.renderEditor();
+    });
+
+    // 2. 输入内容 (防抖推送)
+    document.getElementById('editor').addEventListener('input', () => {
+      const val = document.getElementById('editor').value;
+      this.data[this.currentDate] = val;
+      this.saveLocal();
+      document.getElementById('lastAction').textContent = '已保存至本地 ' + new Date().toLocaleTimeString();
+
+      clearTimeout(this.pushTimer);
+      if(this.config) {
+        ui.updateStatus('syncing', '准备推送...');
+        // 停止输入 3 秒后自动推送到 GitHub
+        this.pushTimer = setTimeout(() => this.pushToCloud(), 3000); 
+      }
+    });
+
+    // 3. 页面切换回前台时立即检查更新
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.config) this.pullFromCloud();
+    });
+  },
+
+  // --- 本地存储 ---
+  saveLocal() { localStorage.setItem('gh_notes_data', JSON.stringify(this.data)); },
+  loadLocal() {
+    const saved = localStorage.getItem('gh_notes_data');
+    this.data = saved ? JSON.parse(saved) : {};
+    this.renderEditor();
+  },
+  renderEditor() {
+    document.getElementById('editor').value = this.data[this.currentDate] || '';
+  },
+
+  // --- 配置管理 ---
+  saveConfig() {
+    const cfg = {
+      owner: document.getElementById('cfg-owner').value.trim(),
+      repo: document.getElementById('cfg-repo').value.trim(),
+      branch: document.getElementById('cfg-branch').value.trim() || 'main',
+      path: document.getElementById('cfg-path').value.trim() || 'notes-data.json',
+      token: document.getElementById('cfg-token').value.trim()
+    };
+
+    if (!cfg.owner || !cfg.repo || !cfg.token) return ui.toast('❌ 请填写完整信息');
+
+    this.config = cfg;
+    localStorage.setItem('gh_sync_config', JSON.stringify(cfg));
+    ui.closeSettings();
+    ui.toast('✅ 配置已保存');
+    this.startAutoSync();
+    this.pullFromCloud();
+  },
+
+  // --- GitHub API 同步逻辑 ---
+  startAutoSync() {
+    // 清理旧定时器
+    if (this.autoSyncInterval) clearInterval(this.autoSyncInterval);
+    // 每 5 秒检查一次云端（前台运行）
+    this.autoSyncInterval = setInterval(() => {
+      if (!document.hidden && !this.isSyncing) this.pullFromCloud();
+    }, 5000);
+  },
+
+  async pushToCloud() {
+    if (!this.config) return;
+    this.isSyncing = true;
+    ui.updateStatus('syncing', '正在保存至云端...');
+
+    try {
+      // 1. 获取当前文件的 SHA
+      const { url, headers } = this.buildReq();
+      let sha = null;
+      const headRes = await fetch(url, { headers });
+      if (headRes.ok) {
+        const json = await headRes.json();
+        sha = json.sha;
+      } else if (headRes.status !== 404) throw new Error('网络异常');
+
+      // 2. 推送内容
+      const body = {
+        message: 'Auto Sync: ' + this.currentDate,
+        content: btoa(unescape(encodeURIComponent(JSON.stringify(this.data)))),
+        branch: this.config.branch
+      };
+      if (sha) body.sha = sha; // 更新时必须带 SHA
+
+      const res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) });
+      
+      if (res.ok) {
+        ui.updateStatus('synced', '已同步到云端');
+        document.getElementById('lastAction').textContent = '已同步 ' + new Date().toLocaleTimeString();
+      } else {
+        const err = await res.json();
+        throw new Error(err.message || 'Push Failed');
+      }
+    } catch (e) {
+      console.error(e);
+      ui.updateStatus('error', '同步失败: ' + e.message);
+    } finally { this.isSyncing = false; }
+  },
+
+  async pullFromCloud() {
+    if (!this.config) return;
+    this.isSyncing = true;
+    
+    try {
+      const { url, headers } = this.buildReq();
+      const res = await fetch(url, { headers });
+
+      if (res.ok) {
+        const json = await res.json();
+        const content = JSON.parse(decodeURIComponent(escape(atob(json.content))));
+        
+        // 如果云端数据更新，覆盖本地内存
+        // 注意：这里采用“云端优先”策略，防止多端冲突
+        if (JSON.stringify(content) !== JSON.stringify(this.data)) {
+           this.data = content;
+           this.saveLocal();
+           this.renderEditor();
+           ui.toast('📥 已从云端拉取最新数据');
+        }
+        ui.updateStatus('synced', '数据已是最新');
+      } else if (res.status === 404) {
+        // 云端无文件，尝试首次推送
+        ui.updateStatus('synced', '云端为空，将自动创建');
+        this.pushToCloud();
+      } else {
+        throw new Error('HTTP ' + res.status);
+      }
+    } catch (e) {
+      // 静默失败，不弹窗打扰用户，仅更新状态灯
+      ui.updateStatus('error', '拉取异常');
+    } finally { this.isSyncing = false; }
+  },
+
+  syncNow() {
+    if(!this.config) return ui.openSettings();
+    this.pullFromCloud();
+    this.pushToCloud();
+  },
+
+  buildReq() {
+    const c = this.config;
+    return {
+      url: `https://api.github.com/repos/${c.owner}/${c.repo}/contents/${c.path}?ref=${c.branch}`,
+      headers: { 'Authorization': `token ${c.token}`, 'Accept': 'application/vnd.github.v3+json' }
+    };
+  }
+};
+
+const ui = {
+  openSettings() { document.getElementById('settingsModal').style.display = 'flex'; },
+  closeSettings() { document.getElementById('settingsModal').style.display = 'none'; },
+  updateStatus(state, text) {
+    const dot = document.getElementById('syncDot');
+    const txt = document.getElementById('syncText');
+    dot.className = 'dot ' + state;
+    txt.textContent = text;
+  },
+  toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+};
+
+// 启动
+window.onload = () => app.init();
+</script>
+</body>
