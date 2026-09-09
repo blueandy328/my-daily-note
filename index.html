@@ -1,518 +1,592 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="dark">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>每日记事本 | GitHub 同步</title>
-<style>
-  :root {
-    --bg: #1e1e2e; --card: #2d2d3f; --border: #44475a;
-    --text: #cdd6f4; --text-sec: #a6adc8好的，我理解你的需求了。你想要一个**界面布局完全参照截图**（日期在顶、中间列表、底部导航、右上角添加按钮），同时保留**记事本**和**记账本**切换，以及**GitHub 后台同步**功能的完整单页应用。
-
-这是一个**完全重构的纯净版本**。界面风格已调整为现代深色护眼模式，交互逻辑完全匹配你的截图描述。
-
-### ✅ 完整代码：`index.html`
-
-直接复制以下代码，覆盖仓库中的文件
-```html
-<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>每日记事 & 账本</title>
-<style>
-  :root {
-    --bg: #121212;
-    --card: #1e1e24;
-    --text-main: #e0e0e0;
-    --text-sec: #a0a0a0;
-    --accent: #bb86fc;
-    --success: #03dac6;
-    --danger: #cf6679;
-    --border: #333;
-    --nav-height: 60px;
-    --radius: 12px;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
-  body { background: var(--bg); color: var(--text-main); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-
-  /* 顶部 Header */
-  header {
-    padding: 20px 20px 10px;
-    background: var(--bg);
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    z-index: 10;
-  }
-  .date-display {
-    font-size: 1.4rem;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-    padding-bottom: 5px;
-  }
-  .date-display span { margin-left: 8px; font-size: 1rem; color: var(--text-sec); font-weight: 400; }
-  .add-btn {
-    font-size: 1.5rem;
-    color: var(--success);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    padding: 0 10px;
-  }
-
-  /* 列表区域 */
-  #mainContent {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px 20px 80px; /* 留出底部导航空间 */
-  }
-  
-  /* 空状态 */
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 60%;
-    color: var(--text-sec);
-  }
-  .empty-state i { font-size: 3rem; margin-bottom: 15px; opacity: 0.5; }
-  
-  /* 列表项样式 (卡片式) */
-  .list-item {
-    background: var(--card);
-    border-radius: var(--radius);
-    padding: 15px;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    transition: transform 0.2s;
-  }
-  .list-item:active { transform: scale(0.98); }
-
-  /* 记事列表特有 */
-  .task-check {
-    width: 24px; height: 24px;
-    accent-color: var(--success);
-    margin-top: 2px;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-  .task-content { flex: 1; }
-  .task-text { font-size: 1rem; margin-bottom: 6px; line-height: 1.4; }
-  .task-note { font-size: 0.8rem; color: var(--text-sec); background: rgba(255,255,255,0.05); padding: 4px 8px; border-radius: 4px; display: inline-block; }
-  .task-note.empty { display: none; }
-  .completed .task-text { text-decoration: line-through; color: var(--text-sec); }
-
-  /* 记账列表特有 */
-  .exp-content { flex: 1; }
-  .exp-cat { font-size: 1rem; margin-bottom: 4px; font-weight: 500; }
-  .exp-note { font-size: 0.8rem; color: var(--text-sec); }
-  .exp-amount { font-size: 1.1rem; color: var(--danger); font-weight: 600; white-space: nowrap; margin-top: 2px; }
-  .income { color: var(--success); }
-
-  /* 底部导航 */
-  .bottom-nav {
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
-    height: var(--nav-height);
-    background: #18181c;
-    border-top: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-around;
-    z-index: 100;
-  }
-  .nav-item {
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    width: 100%; height: 100%;
-    color: var(--text-sec);
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: 0.2s;
-  }
-  .nav-item.active { color: var(--accent); }
-  .nav-icon { font-size: 1.5rem; margin-bottom: 4px; }
-
-  /* 模态框 (输入/设置) */
-  .modal-overlay {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7); z-index: 1000;
-    display: none; justify-content: center; align-items: flex-end; /* 手机风格：底部弹出 */
-  }
-  .modal {
-    background: #25252b; width: 100%; max-width: 500px;
-    border-radius: 20px 20px 0 0; padding: 25px;
-    animation: slideUp 0.3s ease-out;
-    box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
-  }
-  @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-
-  .modal h2 { margin-bottom: 15px; font-size: 1.1rem; color: var(--text-main); border-bottom: 1px solid var(--border); padding-bottom: 10px; }
-  .form-group { margin-bottom: 15px; }
-  .form-group input, .form-group textarea, .form-group select {
-    width: 100%; background: #18181c; border: 1px solid var(--border); color: var(--text-main);
-    padding: 12px; border-radius: 8px; font-size: 1rem;
-  }
-  .form-group textarea { resize: none; height: 80px; }
-  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
-  .btn-full { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 1rem; font-weight: 600; cursor: pointer; }
-  .btn-primary { background: var(--accent); color: #000; }
-  .btn-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-sec); }
-
-  /* 顶部小工具栏 (同步/设置) */
-  .top-tools {
-    position: absolute; top: 20px; right: 15px; display: flex; gap: 10px;
-  }
-  .tool-btn { font-size: 0.8rem; color: var(--text-sec); background: none; border: none; cursor: pointer; padding: 5px; }
-
-  /* 隐藏的文件输入 */
-  #hiddenDate { display: none; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>每日备忘录</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 20px 10px;
+        }
+        .container {
+            max-width: 800px;
+            width: 100%;
+            background: #16213e;
+            border-radius: 24px;
+            padding: 24px 20px 30px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        /* 头部 */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            color: #f0f0f0;
+            letter-spacing: 1px;
+        }
+        .date-picker {
+            background: #0f3460;
+            color: #e0e0e0;
+            border: 1px solid #1a4a7a;
+            border-radius: 12px;
+            padding: 8px 14px;
+            font-size: 16px;
+            outline: none;
+        }
+        .date-picker:focus {
+            border-color: #4a8bc2;
+        }
+        /* 导航标签 */
+        .tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+            border-bottom: 1px solid #2a2a4a;
+            padding-bottom: 8px;
+        }
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 20px;
+            font-weight: 500;
+            transition: all 0.2s;
+            background: transparent;
+            border: none;
+            color: #8a8aa0;
+            font-size: 15px;
+        }
+        .tab.active {
+            background: #0f3460;
+            color: #f0f0f0;
+        }
+        .tab:hover {
+            background: #1a2a4a;
+        }
+        /* 通用输入框 */
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+        .input-group input, .input-group textarea {
+            flex: 1;
+            min-width: 120px;
+            background: #0a1a2e;
+            border: 1px solid #2a3a5a;
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: #e0e0e0;
+            font-size: 15px;
+            outline: none;
+        }
+        .input-group input:focus, .input-group textarea:focus {
+            border-color: #4a8bc2;
+        }
+        .input-group textarea {
+            min-height: 60px;
+            resize: vertical;
+        }
+        .btn {
+            background: #0f3460;
+            border: none;
+            border-radius: 12px;
+            padding: 10px 20px;
+            color: #f0f0f0;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+        .btn:hover {
+            background: #1a4a7a;
+        }
+        .btn-danger {
+            background: #5a1a2e;
+        }
+        .btn-danger:hover {
+            background: #7a2a3e;
+        }
+        /* 列表样式 */
+        .list {
+            list-style: none;
+            margin-top: 10px;
+        }
+        .list li {
+            background: #1a2a3e;
+            border-radius: 12px;
+            padding: 12px 14px;
+            margin-bottom: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-start;
+            gap: 10px;
+            border-left: 4px solid #4a8bc2;
+        }
+        .list li.completed {
+            opacity: 0.7;
+            border-left-color: #2a6a3a;
+        }
+        .list li .item-content {
+            flex: 1;
+            min-width: 100px;
+        }
+        .list li .item-content .title {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .list li .item-content .note {
+            font-size: 13px;
+            color: #a0a0b0;
+        }
+        .list li .checkbox {
+            margin-top: 4px;
+            width: 18px;
+            height: 18px;
+            accent-color: #4a8bc2;
+        }
+        .list li .actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+        .list li .actions button {
+            background: #2a3a5a;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 10px;
+            color: #e0e0e0;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        .list li .actions button:hover {
+            background: #3a4a6a;
+        }
+        .list li .actions .delete-btn {
+            background: #5a1a2e;
+        }
+        .list li .actions .delete-btn:hover {
+            background: #7a2a3e;
+        }
+        /* 记账模块 */
+        .finance-summary {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #0a1a2e;
+            border-radius: 16px;
+        }
+        .finance-summary > div {
+            flex: 1;
+            min-width: 100px;
+        }
+        .finance-summary .label {
+            font-size: 13px;
+            color: #8a8aa0;
+        }
+        .finance-summary .value {
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .finance-summary .income {
+            color: #4a8bc2;
+        }
+        .finance-summary .expense {
+            color: #c24a4a;
+        }
+        .finance-summary .balance {
+            color: #f0f0f0;
+        }
+        .finance-input {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .finance-input input, .finance-input select {
+            background: #0a1a2e;
+            border: 1px solid #2a3a5a;
+            border-radius: 12px;
+            padding: 10px 14px;
+            color: #e0e0e0;
+            font-size: 15px;
+            outline: none;
+        }
+        .finance-input input:focus, .finance-input select:focus {
+            border-color: #4a8bc2;
+        }
+        .finance-input select {
+            min-width: 80px;
+        }
+        .finance-list li {
+            border-left-color: #c24a4a;
+        }
+        .finance-list li.income-item {
+            border-left-color: #4a8bc2;
+        }
+        /* 隐藏工具 */
+        .hidden {
+            display: none !important;
+        }
+        /* 页脚 GitHub 同步 */
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            color: #5a5a7a;
+            font-size: 13px;
+        }
+        .footer a {
+            color: #4a8bc2;
+            text-decoration: none;
+        }
+        /* 手机端适配 */
+        @media (max-width: 480px) {
+            .container {
+                padding: 16px 12px;
+            }
+            .header h1 {
+                font-size: 20px;
+            }
+            .input-group input, .input-group textarea {
+                font-size: 14px;
+                padding: 10px;
+            }
+            .btn {
+                padding: 10px 14px;
+                font-size: 14px;
+            }
+            .list li {
+                padding: 10px 12px;
+            }
+        }
+    </style>
 </head>
 <body>
-
-  <header>
-    <!-- 点击日期区域触发原生选择器 -->
-    <div class="date-display" onclick="document.getElementById('hiddenDate').click()">
-      <span id="dateText">今天 2026/09/08</span>
-      <span style="font-size:0.8rem">▼</span>
+<div class="container" id="app">
+    <!-- 头部 -->
+    <div class="header">
+        <h1>📋 每日备忘录</h1>
+        <input type="date" class="date-picker" id="datePicker">
     </div>
-    <!-- 隐藏的 Date Input -->
-    <input type="date" id="hiddenDate">
 
-    <!-- 右上角添加按钮 -->
-    <button class="add-btn" onclick="ui.showAddModal()">＋</button>
-  </header>
-
-  <!-- 悬浮工具 (同步/设置) -->
-  <div class="top-tools">
-    <button class="tool-btn" onclick="app.syncNow()">🔄 同步</button>
-    <button class="tool-btn" onclick="ui.showSettings()">⚙️</button>
-  </div>
-
-  <!-- 主内容区 -->
-  <div id="mainContent">
-    <!-- JS 动态渲染列表或空状态 -->
-  </div>
-
-  <!-- 底部导航 -->
-  <div class="bottom-nav">
-    <div class="nav-item active" onclick="ui.switchTab('tasks')">
-      <div class="nav-icon">📝</div>
-      <span>记事本</span>
+    <!-- 导航标签 -->
+    <div class="tabs">
+        <button class="tab active" data-tab="todo">📝 待办</button>
+        <button class="tab" data-tab="summary">📄 总结</button>
+        <button class="tab" data-tab="finance">💰 记账</button>
     </div>
-    <div class="nav-item" onclick="ui.switchTab('expenses')">
-      <div class="nav-icon">💰</div>
-      <span>记账本</span>
-    </div>
-  </div>
 
-  <!-- 添加弹窗 (底部弹出) -->
-  <div class="modal-overlay" id="addModal">
-    <div class="modal">
-      <h2 id="modalTitle">添加记录</h2>
-      
-      <!-- 记事表单 -->
-      <div id="form-task">
-        <div class="form-group"><input id="inp-task" placeholder="输入要做的事项..." autofocus></div>
-        <div class="form-group"><textarea id="inp-task-note" placeholder="备注 (可选: 未完成原因等)"></textarea></div>
-        <div class="modal-actions">
-          <button class="btn-full btn-cancel" onclick="ui.closeAddModal()">取消</button>
-          <button class="btn-full btn-primary" onclick="app.addTask()">确认添加</button>
+    <!-- 待办事项 -->
+    <div id="todoPanel" class="panel">
+        <div class="input-group">
+            <input type="text" id="todoInput" placeholder="输入待办事项...">
+            <input type="text" id="todoNote" placeholder="备注（可选）">
+            <button class="btn" id="addTodoBtn">添加</button>
         </div>
-      </div>
-
-      <!-- 记账表单 -->
-      <div id="form-exp" style="display:none;">
-        <div style="display:flex; gap:10px; margin-bottom:15px;">
-          <div class="form-group" style="flex:1"><input id="inp-exp-cat" placeholder="分类 (如 餐饮)"></div>
-          <div class="form-group" style="flex:1"><input id="inp-exp-amt" type="number" placeholder="金额" inputmode="decimal"></div>
-        </div>
-        <div class="form-group"><input id="inp-exp-note" placeholder="备注 (可选)"></div>
-        <div class="modal-actions">
-          <button class="btn-full btn-cancel" onclick="ui.closeAddModal()">取消</button>
-          <button class="btn-full btn-primary" onclick="app.addExpense()">记账</button>
-        </div>
-      </div>
+        <ul class="list" id="todoList"></ul>
     </div>
-  </div>
 
-  <!-- 设置弹窗 -->
-  <div class="modal-overlay" id="settingsModal">
-    <div class="modal">
-      <h2>GitHub 同步配置</h2>
-      <div class="form-group"><input id="cfg-owner" placeholder="用户名 (Owner)"></div>
-      <div class="form-group"><input id="cfg-repo" placeholder="仓库名 (Repo)"></div>
-      <div class="form-group"><input id="cfg-token" type="password" placeholder="Personal Access Token (repo权限)"></div>
-      <div class="modal-actions">
-        <button class="btn-full btn-cancel" onclick="ui.closeSettings()">关闭</button>
-        <button class="btn-full btn-primary" onclick="app.saveConfig()">保存并连接</button>
-      </div>
+    <!-- 日终总结 -->
+    <div id="summaryPanel" class="panel hidden">
+        <div class="input-group">
+            <textarea id="summaryInput" placeholder="写下今天的总结..."></textarea>
+            <button class="btn" id="saveSummaryBtn">保存</button>
+        </div>
+        <div id="summaryDisplay" style="background:#0a1a2e; border-radius:12px; padding:16px; margin-top:12px; white-space:pre-wrap;"></div>
     </div>
-  </div>
+
+    <!-- 记账模块 -->
+    <div id="financePanel" class="panel hidden">
+        <div class="finance-summary">
+            <div>
+                <div class="label">收入</div>
+                <div class="value income" id="totalIncome">0.00</div>
+            </div>
+            <div>
+                <div class="label">支出</div>
+                <div class="value expense" id="totalExpense">0.00</div>
+            </div>
+            <div>
+                <div class="label">结余</div>
+                <div class="value balance" id="balance">0.00</div>
+            </div>
+        </div>
+        <div class="finance-input">
+            <select id="financeType">
+                <option value="income">收入</option>
+                <option value="expense">支出</option>
+            </select>
+            <input type="number" id="financeAmount" placeholder="金额" step="0.01">
+            <input type="text" id="financeDesc" placeholder="说明（可选）">
+            <button class="btn" id="addFinanceBtn">添加</button>
+        </div>
+        <ul class="list finance-list" id="financeList"></ul>
+    </div>
+
+    <!-- 页脚 -->
+    <div class="footer">
+        💾 数据自动保存至本地 &nbsp;|&nbsp; <a href="#" id="githubLink">GitHub 同步配置</a>
+    </div>
+</div>
 
 <script>
-const app = {
-  data: {},
-  currentDate: new Date().toISOString().split('T')[0],
-  config: (function(){ try { return JSON.parse(localStorage.getItem('gh_cfg') || '{}'); } catch{ return {}; } })(),
-  activeTab: 'tasks',
-  isSyncing: false,
-  pushTimer: null,
-
-  init() {
-    this.updateDateDisplay();
-    this.loadLocal();
-    this.bindEvents();
-    this.render();
-    if(Object.keys(this.config).length > 0) this.startSyncLoop();
-  },
-
-  bindEvents() {
-    // 日期切换
-    const dateInput = document.getElementById('hiddenDate');
-    dateInput.value = this.currentDate;
-    dateInput.addEventListener('change', (e) => {
-      this.currentDate = e.target.value;
-      this.updateDateDisplay();
-      this.render();
-      if(this.isSyncing) return; // 同步中不触发
-      if(Object.keys(this.config).length > 0) this.pullFromCloud();
-    });
-
-    // 点击遮罩关闭
-    document.getElementById('addModal').addEventListener('click', (e) => { if(e.target === e.currentTarget) ui.closeAddModal(); });
-    document.getElementById('settingsModal').addEventListener('click', (e) => { if(e.target === e.currentTarget) ui.closeSettings(); });
-  },
-
-  updateDateDisplay() {
-    const d = new Date(this.currentDate);
-    const today = new Date().toISOString().split('T')[0];
-    const prefix = this.currentDate === today ? "今天" : "";
-    const fmt = d.toLocaleDateString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit' }).replace(/\//g, '/');
-    document.getElementById('dateText').innerText = `${prefix} ${fmt}`;
-  },
-
-  // --- 数据操作 ---
-  loadLocal() {
-    const saved = localStorage.getItem('my_app_data_v3');
-    this.data = saved ? JSON.parse(saved) : {};
-    if(!this.data[this.currentDate]) this.data[this.currentDate] = { tasks: [], expenses: [], updatedAt: Date.now() };
-  },
-
-  saveLocal() {
-    this.data[this.currentDate].updatedAt = Date.now();
-    localStorage.setItem('my_app_data_v3', JSON.stringify(this.data));
-  },
-
-  genId() { return 'id_' + Date.now() + Math.floor(Math.random()*900+100); },
-
-  // --- 渲染核心 ---
-  render() {
-    const day = this.data[this.currentDate] || { tasks: [], expenses: [] };
-    const box = document.getElementById('mainContent');
-    let html = '';
-
-    if (this.activeTab === 'tasks') {
-      if (day.tasks.length === 0) {
-        html = `<div class="empty-state"><i>📝</i><span>还没有添加任何事项</span></div>`;
-      } else {
-        day.tasks.forEach(t => {
-          html += `
-            <div class="list-item ${t.done?'completed':''}">
-              <input type="checkbox" class="task-check" ${t.done?'checked':''} onchange="app.toggleTask('${t.id}', this.checked)">
-              <div class="task-content">
-                <div class="task-text">${this.escHtml(t.text)}</div>
-                <div class="task-note ${t.note?'':'empty'}">${this.escHtml(t.note||'')}</div>
-              </div>
-              <button onclick="app.delTask('${t.id}')" style="background:none;border:none;color:var(--text-sec);font-size:1.2rem;padding:0 5px;cursor:pointer;">×</button>
-            </div>`;
-        });
-      }
-    } else {
-      if (day.expenses.length === 0) {
-        html = `<div class="empty-state"><i>💰</i><span>今天还没有记账哦</span></div>`;
-      } else {
-        day.expenses.forEach(e => {
-          html += `
-            <div class="list-item">
-              <div class="exp-content">
-                <div class="exp-cat">${this.escHtml(e.category)}</div>
-                <div class="exp-note">${this.escHtml(e.note)}</div>
-              </div>
-              <div class="exp-amount">¥${parseFloat(e.amount).toFixed(2)}</div>
-            </div>`;
-        });
-        // 底部合计
-        const total = day.expenses.reduce((sum, e) => sum + parseFloat(e.amount||0), 0);
-        html += `<div style="text-align:center; margin-top:20px; color:var(--text-sec); font-size:0.9rem;">今日支出合计: ¥${total.toFixed(2)}</div>`;
-      }
-    }
-    box.innerHTML = html;
-  },
-
-  // --- 业务逻辑 ---
-  addTask() {
-    const text = document.getElementById('inp-task').value.trim();
-    if(!text) return alert("请输入内容");
-    const note = document.getElementById('inp-task-note').value.trim();
-    
-    this.data[this.currentDate].tasks.unshift({ // unshift 添加到最前
-      id: this.genId(), text, note, done: false, updatedAt: Date.now()
-    });
-    this.saveLocal();
-    this.render();
-    ui.closeAddModal();
-    this.triggerPush();
-    document.getElementById('inp-task').value = '';
-    document.getElementById('inp-task-note').value = '';
-  },
-
-  toggleTask(id, done) {
-    const t = this.data[this.currentDate].tasks.find(x => x.id === id);
-    if(t) { t.done = done; t.updatedAt = Date.now(); this.saveLocal(); this.render(); this.triggerPush(); }
-  },
-
-  delTask(id) {
-    if(!confirm("确定删除吗？")) return;
-    this.data[this.currentDate].tasks = this.data[this.currentDate].tasks.filter(x => x.id !== id);
-    this.saveLocal(); this.render(); this.triggerPush();
-  },
-
-  addExpense() {
-    const cat = document.getElementById('inp-exp-cat').value.trim() || '未分类';
-    const amt = document.getElementById('inp-exp-amt').value;
-    const note = document.getElementById('inp-exp-note').value.trim();
-    
-    if(!amt) return alert("请输入金额");
-    this.data[this.currentDate].expenses.unshift({
-      id: this.genId(), category: cat, amount: amt, note, updatedAt: Date.now()
-    });
-    this.saveLocal(); this.render();
-    ui.closeAddModal();
-    this.triggerPush();
-  },
-
-  // --- 同步逻辑 (简化版) ---
-  triggerPush() { clearTimeout(this.pushTimer); this.pushTimer = setTimeout(()=>this.pushToCloud(), 2000); },
-  startSyncLoop() {
-    setInterval(() => { if(!document.hidden && !this.isSyncing) this.pullFromCloud(); }, 10000); // 10秒轮询
-  },
-  
-  async pullFromCloud() {
-    if(!Object.keys(this.config).length || this.isSyncing) return;
-    this.isSyncing = true;
-    try {
-      const res = await fetch(this._apiUrl(), { headers: this._headers() });
-      if(res.ok) {
-        const cloud = JSON.parse(decodeURIComponent(escape(atob((await res.json()).content))));
-        // 简单合并 (以时间戳新者为准)
-        for(let d in cloud) {
-          if(!this.data[d]) this.data[d] = { tasks: [], expenses: [], updatedAt: 0 };
-          // 合并 tasks
-          cloud[d].tasks.forEach(ct => {
-            const lt = this.data[d].tasks.find(t=>t.id===ct.id);
-            if(!lt || ct.updatedAt > lt.updatedAt) {
-              if(!lt) this.data[d].tasks.push(ct);
-              else Object.assign(lt, ct);
+    (function() {
+        // --- 数据存储与初始化 ---
+        function getData() {
+            const raw = localStorage.getItem('memoData');
+            if (raw) {
+                try { return JSON.parse(raw); } catch(e) { console.error('数据解析失败', e); }
             }
-          });
-          // 合并 expenses
-          cloud[d].expenses.forEach(ce => {
-            const le = this.data[d].expenses.find(e=>e.id===ce.id);
-            if(!le || ce.updatedAt > le.updatedAt) {
-              if(!le) this.data[d].expenses.push(ce);
-              else Object.assign(le, ce);
-            }
-          });
+            return {};
         }
-        this.saveLocal(); this.render();
-      }
-    } catch(e) { console.warn("Sync fail", e); }
-    finally { this.isSyncing = false; }
-  },
 
-  async pushToCloud() {
-    if(!Object.keys(this.config).length) return;
-    try {
-      const url = this._apiUrl();
-      const headers = this._headers();
-      let sha = null;
-      const getRes = await fetch(url, {headers});
-      if(getRes.ok) sha = (await getRes.json()).sha;
-      
-      const body = {
-        message: 'Auto Sync',
-        content: btoa(unescape(encodeURIComponent(JSON.stringify(this.data)))),
-        branch: this.config.branch || 'main'
-      };
-      if(sha) body.sha = sha;
+        function saveData(data) {
+            localStorage.setItem('memoData', JSON.stringify(data));
+        }
 
-      const res = await fetch(url, { method: 'PUT', headers, body: JSON.stringify(body) });
-      if(!res.ok) throw new Error('Push failed');
-    } catch(e) { console.error(e); }
-  },
-  
-  _apiUrl() {
-    return `https://api.github.com/repos/${this.config.owner}/${this.config.repo}/contents/data.json?ref=${this.config.branch||'main'}`;
-  },
-  _headers() {
-    return { 'Authorization': `token ${this.config.token}`, 'Accept': 'application/vnd.github.v3+json' };
-  },
-  syncNow() { this.pullFromCloud(); this.pushToCloud(); },
-  saveConfig() {
-    const o = document.getElementById('cfg-owner').value.trim();
-    const r = document.getElementById('cfg-repo').value.trim();
-    const t = document.getElementById('cfg-token').value.trim();
-    if(!o||!r||!t) return alert("必填项不能为空");
-    this.config = { owner:o, repo:r, token:t, branch: document.getElementById('hiddenDate').value ? 'main' : 'main' }; // 默认 main
-    localStorage.setItem('gh_cfg', JSON.stringify(this.config));
-    ui.closeSettings();
-    this.startSyncLoop();
-    this.pushToCloud();
-    alert("配置已保存！");
-  },
-  
-  escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
-};
+        // 获取当前日期
+        function getCurrentDate() {
+            const picker = document.getElementById('datePicker');
+            return picker ? picker.value : '';
+        }
 
-const ui = {
-  switchTab(tab) {
-    app.activeTab = tab;
-    document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.innerText.includes(tab==='tasks'?'记事':'记账')));
-    app.render();
-  },
-  showAddModal() {
-    document.getElementById('addModal').style.display = 'flex';
-    if(app.activeTab === 'tasks') {
-      document.getElementById('form-task').style.display = 'block';
-      document.getElementById('form-exp').style.display = 'none';
-      setTimeout(()=>document.getElementById('inp-task').focus(), 100);
-    } else {
-      document.getElementById('form-task').style.display = 'none';
-      document.getElementById('form-exp').style.display = 'block';
-      setTimeout(()=>document.getElementById('inp-exp-amt').focus(), 100);
-    }
-  },
-  closeAddModal() { document.getElementById('addModal').style.display = 'none'; },
-  
-  showSettings() {
-    document.getElementById('settingsModal').style.display = 'flex';
-    document.getElementById('cfg-owner').value = app.config.owner || '';
-    document.getElementById('cfg-repo').value = app.config.repo || '';
-    document.getElementById('cfg-token').value = app.config.token || '';
-  },
-  closeSettings() { document.getElementById('settingsModal').style.display = 'none'; }
-};
+        // 获取指定日期的记录
+        function getDayData(date) {
+            const data = getData();
+            if (!data[date]) {
+                data[date] = { todo: [], summary: '', finance: [] };
+                saveData(data);
+            }
+            return data[date];
+        }
 
-window.onload = () => app.init();
+        // 保存指定日期的记录
+        function setDayData(date, dayData) {
+            const data = getData();
+            data[date] = dayData;
+            saveData(data);
+        }
+
+        // --- DOM 引用 ---
+        const datePicker = document.getElementById('datePicker');
+        const todoPanel = document.getElementById('todoPanel');
+        const summaryPanel = document.getElementById('summaryPanel');
+        const financePanel = document.getElementById('financePanel');
+        const todoList = document.getElementById('todoList');
+        const todoInput = document.getElementById('todoInput');
+        const todoNote = document.getElementById('todoNote');
+        const addTodoBtn = document.getElementById('addTodoBtn');
+        const summaryInput = document.getElementById('summaryInput');
+        const saveSummaryBtn = document.getElementById('saveSummaryBtn');
+        const summaryDisplay = document.getElementById('summaryDisplay');
+        const financeType = document.getElementById('financeType');
+        const financeAmount = document.getElementById('financeAmount');
+        const financeDesc = document.getElementById('financeDesc');
+        const addFinanceBtn = document.getElementById('addFinanceBtn');
+        const financeList = document.getElementById('financeList');
+        const totalIncomeEl = document.getElementById('totalIncome');
+        const totalExpenseEl = document.getElementById('totalExpense');
+        const balanceEl = document.getElementById('balance');
+
+        // --- 设置默认日期为今天 ---
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        datePicker.value = `${yyyy}-${mm}-${dd}`;
+
+        // --- 渲染函数 ---
+        function renderAll() {
+            const date = getCurrentDate();
+            const dayData = getDayData(date);
+
+            // 渲染待办
+            renderTodo(dayData.todo);
+            // 渲染总结
+            renderSummary(dayData.summary);
+            // 渲染记账
+            renderFinance(dayData.finance);
+        }
+
+        // 渲染待办
+        function renderTodo(todos) {
+            if (!todos) todos = [];
+            todoList.innerHTML = '';
+            todos.forEach((item, index) => {
+                const li = document.createElement('li');
+                if (item.done) li.classList.add('completed');
+                li.innerHTML = `
+                    <input type="checkbox" class="checkbox" ${item.done ? 'checked' : ''} data-index="${index}">
+                    <div class="item-content">
+                        <div class="title">${escapeHtml(item.title)}</div>
+                        ${item.note ? `<div class="note">${escapeHtml(item.note)}</div>` : ''}
+                    </div>
+                    <div class="actions">
+                        <button class="delete-btn" data-type="todo" data-index="${index}">删除</button>
+                    </div>
+                `;
+                todoList.appendChild(li);
+            });
+            // 绑定复选框事件
+            todoList.querySelectorAll('.checkbox').forEach(cb => {
+                cb.addEventListener('change', function(e) {
+                    const idx = parseInt(this.dataset.index);
+                    const date = getCurrentDate();
+                    const dayData = getDayData(date);
+                    dayData.todo[idx].done = this.checked;
+                    setDayData(date, dayData);
+                    renderTodo(dayData.todo); // 刷新样式
+                });
+            });
+            // 绑定删除事件
+            todoList.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    const idx = parseInt(this.dataset.index);
+                    const date = getCurrentDate();
+                    const dayData = getDayData(date);
+                    dayData.todo.splice(idx, 1);
+                    setDayData(date, dayData);
+                    renderAll();
+                });
+            });
+        }
+
+        // 渲染总结
+        function renderSummary(summary) {
+            summaryDisplay.textContent = summary || '今天还没有写总结。';
+            summaryInput.value = summary || '';
+        }
+
+        // 渲染记账
+        function renderFinance(finances) {
+            if (!finances) finances = [];
+            let totalIncome = 0, totalExpense = 0;
+            financeList.innerHTML = '';
+            finances.forEach((item, index) => {
+                const li = document.createElement('li');
+                if (item.type === 'income') li.classList.add('income-item');
+                const sign = item.type === 'income' ? '+' : '-';
+                li.innerHTML = `
+                    <div class="item-content">
+                        <div class="title">${sign} ¥${Number(item.amount).toFixed(2)}</div>
+                        ${item.desc ? `<div class="note">${escapeHtml(item.desc)}</div>` : ''}
+                    </div>
+                    <div class="actions">
+                        <button class="delete-btn" data-type="finance" data-index="${index}">删除</button>
+                    </div>
+                `;
+                financeList.appendChild(li);
+                if (item.type === 'income') totalIncome += Number(item.amount);
+                else totalExpense += Number(item.amount);
+            });
+            totalIncomeEl.textContent = totalIncome.toFixed(2);
+            totalExpenseEl.textContent = totalExpense.toFixed(2);
+            balanceEl.textContent = (totalIncome - totalExpense).toFixed(2);
+            // 绑定删除事件
+            financeList.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    const idx = parseInt(this.dataset.index);
+                    const date = getCurrentDate();
+                    const dayData = getDayData(date);
+                    dayData.finance.splice(idx, 1);
+                    setDayData(date, dayData);
+                    renderAll();
+                });
+            });
+        }
+
+        // 简单转义
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // --- 事件绑定 ---
+
+        // 日期切换
+        datePicker.addEventListener('change', function() {
+            renderAll();
+        });
+
+        // 添加待办
+        addTodoBtn.addEventListener('click', function() {
+            const title = todoInput.value.trim();
+            const note = todoNote.value.trim();
+            if (!title) return;
+            const date = getCurrentDate();
+            const dayData = getDayData(date);
+            dayData.todo.push({ title, note, done: false });
+            setDayData(date, dayData);
+            todoInput.value = '';
+            todoNote.value = '';
+            renderTodo(dayData.todo);
+        });
+
+        // 保存总结
+        saveSummaryBtn.addEventListener('click', function() {
+            const summary = summaryInput.value.trim();
+            const date = getCurrentDate();
+            const dayData = getDayData(date);
+            dayData.summary = summary;
+            setDayData(date, dayData);
+            renderSummary(summary);
+        });
+
+        // 添加记账
+        addFinanceBtn.addEventListener('click', function() {
+            const type = financeType.value;
+            const amount = parseFloat(financeAmount.value);
+            const desc = financeDesc.value.trim();
+            if (isNaN(amount) || amount <= 0) return;
+            const date = getCurrentDate();
+            const dayData = getDayData(date);
+            dayData.finance.push({ type, amount, desc });
+            setDayData(date, dayData);
+            financeAmount.value = '';
+            financeDesc.value = '';
+            renderFinance(dayData.finance);
+        });
+
+        // 标签切换
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', function() {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                this.classList.add('active');
+                const target = this.dataset.tab;
+                todoPanel.classList.add('hidden');
+                summaryPanel.classList.add('hidden');
+                financePanel.classList.add('hidden');
+                if (target === 'todo') todoPanel.classList.remove('hidden');
+                else if (target === 'summary') summaryPanel.classList.remove('hidden');
+                else if (target === 'finance') financePanel.classList.remove('hidden');
+            });
+        });
+
+        // 初始渲染
+        renderAll();
+    })();
 </script>
 </body>
 </html>
