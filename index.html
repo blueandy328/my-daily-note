@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>每日备忘录</title>
+    <!-- 引入 Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
         * {
             margin: 0;
@@ -27,7 +30,37 @@
             padding: 24px 20px 30px;
             box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
-        /* 头部 */
+        /* 同步状态指示器 */
+        .sync-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 16px;
+            padding: 8px 16px;
+            background: #0a1a2e;
+            border-radius: 12px;
+            font-size: 13px;
+        }
+        .sync-status .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4a4a4a;
+        }
+        .sync-status .dot.synced {
+            background: #4a8bc2;
+        }
+        .sync-status .dot.syncing {
+            background: #f0c040;
+            animation: pulse 1s infinite;
+        }
+        .sync-status .dot.error {
+            background: #c24a4a;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
         .header {
             display: flex;
             justify-content: space-between;
@@ -54,7 +87,6 @@
         .date-picker:focus {
             border-color: #4a8bc2;
         }
-        /* 导航标签 */
         .tabs {
             display: flex;
             gap: 12px;
@@ -80,7 +112,6 @@
         .tab:hover {
             background: #1a2a4a;
         }
-        /* 通用输入框 */
         .input-group {
             display: flex;
             gap: 10px;
@@ -125,7 +156,6 @@
         .btn-danger:hover {
             background: #7a2a3e;
         }
-        /* 列表样式 */
         .list {
             list-style: none;
             margin-top: 10px;
@@ -186,7 +216,6 @@
         .list li .actions .delete-btn:hover {
             background: #7a2a3e;
         }
-        /* 记账模块 */
         .finance-summary {
             display: flex;
             gap: 20px;
@@ -244,22 +273,15 @@
         .finance-list li.income-item {
             border-left-color: #4a8bc2;
         }
-        /* 隐藏工具 */
         .hidden {
             display: none !important;
         }
-        /* 页脚 GitHub 同步 */
         .footer {
             margin-top: 30px;
             text-align: center;
             color: #5a5a7a;
             font-size: 13px;
         }
-        .footer a {
-            color: #4a8bc2;
-            text-decoration: none;
-        }
-        /* 手机端适配 */
         @media (max-width: 480px) {
             .container {
                 padding: 16px 12px;
@@ -283,6 +305,12 @@
 </head>
 <body>
 <div class="container" id="app">
+    <!-- 同步状态指示器 -->
+    <div class="sync-status">
+        <span class="dot" id="syncDot"></span>
+        <span id="syncText">正在同步...</span>
+    </div>
+
     <!-- 头部 -->
     <div class="header">
         <h1>📋 每日备忘录</h1>
@@ -345,248 +373,351 @@
 
     <!-- 页脚 -->
     <div class="footer">
-        💾 数据自动保存至本地 &nbsp;|&nbsp; <a href="#" id="githubLink">GitHub 同步配置</a>
+        💾 数据实时同步至云端 &nbsp;|&nbsp; <a href="https://console.firebase.google.com" target="_blank">Firebase 控制台</a>
     </div>
 </div>
 
 <script>
-    (function() {
-        // --- 数据存储与初始化 ---
-        function getData() {
-            const raw = localStorage.getItem('memoData');
-            if (raw) {
-                try { return JSON.parse(raw); } catch(e) { console.error('数据解析失败', e); }
+    // ==========================================
+    // 1. 配置 Firebase（替换为你的配置）
+    // ==========================================
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyCn8iDouqU59HcdmOnx4GiU9K-jXOzw65A",
+  authDomain: "daily-note-33904.firebaseapp.com",
+  projectId: "daily-note-33904",
+  storageBucket: "daily-note-33904.firebasestorage.app",
+  messagingSenderId: "68183369236",
+  appId: "1:68183369236:web:3c96d1e1cc43f05264e901",
+  measurementId: "G-QH8FY8G706"
+};
+
+    // ==========================================
+    // 2. 同步状态管理
+    // ==========================================
+    const syncDot = document.getElementById('syncDot');
+    const syncText = document.getElementById('syncText');
+
+    function setSyncStatus(status, message) {
+        syncDot.className = 'dot';
+        if (status === 'synced') {
+            syncDot.classList.add('synced');
+            syncText.textContent = message || '已同步';
+        } else if (status === 'syncing') {
+            syncDot.classList.add('syncing');
+            syncText.textContent = message || '正在同步...';
+        } else if (status === 'error') {
+            syncDot.classList.add('error');
+            syncText.textContent = message || '同步失败';
+        }
+    }
+
+    // ==========================================
+    // 3. 数据同步函数
+    // ==========================================
+    async function syncDataToFirebase(userId, data) {
+        try {
+            setSyncStatus('syncing', '正在保存到云端...');
+            await db.collection('memoData').doc(userId).set({
+                data: data,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            setSyncStatus('synced', '已同步');
+        } catch (error) {
+            console.error('保存到Firebase失败:', error);
+            setSyncStatus('error', '保存失败，请检查网络');
+        }
+    }
+
+    async function fetchDataFromFirebase(userId) {
+        try {
+            setSyncStatus('syncing', '正在从云端加载...');
+            const doc = await db.collection('memoData').doc(userId).get();
+            if (doc.exists) {
+                setSyncStatus('synced', '已同步');
+                return doc.data().data;
+            } else {
+                setSyncStatus('synced', '暂无云端数据');
+                return null;
             }
-            return {};
+        } catch (error) {
+            console.error('从Firebase加载失败:', error);
+            setSyncStatus('error', '加载失败，使用本地数据');
+            return null;
         }
+    }
 
-        function saveData(data) {
-            localStorage.setItem('memoData', JSON.stringify(data));
-        }
-
-        // 获取当前日期
-        function getCurrentDate() {
-            const picker = document.getElementById('datePicker');
-            return picker ? picker.value : '';
-        }
-
-        // 获取指定日期的记录
-        function getDayData(date) {
-            const data = getData();
-            if (!data[date]) {
-                data[date] = { todo: [], summary: '', finance: [] };
-                saveData(data);
+    // 实时监听云端数据变化
+    function subscribeToFirebase(userId) {
+        db.collection('memoData').doc(userId).onSnapshot((doc) => {
+            if (doc.exists && doc.data().data) {
+                const cloudData = doc.data().data;
+                const localData = getData();
+                // 仅当云端数据更新时，才更新本地（避免循环写回）
+                if (JSON.stringify(cloudData) !== JSON.stringify(localData)) {
+                    console.log('检测到云端数据更新，正在同步到本地...');
+                    localStorage.setItem('memoData', JSON.stringify(cloudData));
+                    renderAll();
+                }
             }
-            return data[date];
-        }
+        }, (error) => {
+            console.error('实时监听失败:', error);
+        });
+    }
 
-        // 保存指定日期的记录
-        function setDayData(date, dayData) {
-            const data = getData();
-            data[date] = dayData;
+    // ==========================================
+    // 4. 本地数据管理（保持不变）
+    // ==========================================
+    function getData() {
+        const raw = localStorage.getItem('memoData');
+        if (raw) {
+            try { return JSON.parse(raw); } catch(e) { console.error('数据解析失败', e); }
+        }
+        return {};
+    }
+
+    function saveData(data) {
+        localStorage.setItem('memoData', JSON.stringify(data));
+        // 每次保存本地数据时，自动同步到云端
+        const userId = 'default_user'; // 可改为用户ID
+        syncDataToFirebase(userId, data);
+    }
+
+    function getCurrentDate() {
+        const picker = document.getElementById('datePicker');
+        return picker ? picker.value : '';
+    }
+
+    function getDayData(date) {
+        const data = getData();
+        if (!data[date]) {
+            data[date] = { todo: [], summary: '', finance: [] };
             saveData(data);
         }
+        return data[date];
+    }
 
-        // --- DOM 引用 ---
-        const datePicker = document.getElementById('datePicker');
-        const todoPanel = document.getElementById('todoPanel');
-        const summaryPanel = document.getElementById('summaryPanel');
-        const financePanel = document.getElementById('financePanel');
-        const todoList = document.getElementById('todoList');
-        const todoInput = document.getElementById('todoInput');
-        const todoNote = document.getElementById('todoNote');
-        const addTodoBtn = document.getElementById('addTodoBtn');
-        const summaryInput = document.getElementById('summaryInput');
-        const saveSummaryBtn = document.getElementById('saveSummaryBtn');
-        const summaryDisplay = document.getElementById('summaryDisplay');
-        const financeType = document.getElementById('financeType');
-        const financeAmount = document.getElementById('financeAmount');
-        const financeDesc = document.getElementById('financeDesc');
-        const addFinanceBtn = document.getElementById('addFinanceBtn');
-        const financeList = document.getElementById('financeList');
-        const totalIncomeEl = document.getElementById('totalIncome');
-        const totalExpenseEl = document.getElementById('totalExpense');
-        const balanceEl = document.getElementById('balance');
+    function setDayData(date, dayData) {
+        const data = getData();
+        data[date] = dayData;
+        saveData(data);
+    }
 
-        // --- 设置默认日期为今天 ---
-        const today = new Date();
-        const yyyy = today.getFullYear();
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        datePicker.value = `${yyyy}-${mm}-${dd}`;
+    // ==========================================
+    // 5. DOM 引用与渲染（保持不变）
+    // ==========================================
+    const datePicker = document.getElementById('datePicker');
+    const todoPanel = document.getElementById('todoPanel');
+    const summaryPanel = document.getElementById('summaryPanel');
+    const financePanel = document.getElementById('financePanel');
+    const todoList = document.getElementById('todoList');
+    const todoInput = document.getElementById('todoInput');
+    const todoNote = document.getElementById('todoNote');
+    const addTodoBtn = document.getElementById('addTodoBtn');
+    const summaryInput = document.getElementById('summaryInput');
+    const saveSummaryBtn = document.getElementById('saveSummaryBtn');
+    const summaryDisplay = document.getElementById('summaryDisplay');
+    const financeType = document.getElementById('financeType');
+    const financeAmount = document.getElementById('financeAmount');
+    const financeDesc = document.getElementById('financeDesc');
+    const addFinanceBtn = document.getElementById('addFinanceBtn');
+    const financeList = document.getElementById('financeList');
+    const totalIncomeEl = document.getElementById('totalIncome');
+    const totalExpenseEl = document.getElementById('totalExpense');
+    const balanceEl = document.getElementById('balance');
 
-        // --- 渲染函数 ---
-        function renderAll() {
-            const date = getCurrentDate();
-            const dayData = getDayData(date);
+    // 设置默认日期
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, '0');
+    const dd = String(today.getDate()).padStart(2, '0');
+    datePicker.value = `${yyyy}-${mm}-${dd}`;
 
-            // 渲染待办
-            renderTodo(dayData.todo);
-            // 渲染总结
-            renderSummary(dayData.summary);
-            // 渲染记账
-            renderFinance(dayData.finance);
-        }
+    // ==========================================
+    // 6. 渲染函数（保持不变）
+    // ==========================================
+    function renderAll() {
+        const date = getCurrentDate();
+        const dayData = getDayData(date);
+        renderTodo(dayData.todo);
+        renderSummary(dayData.summary);
+        renderFinance(dayData.finance);
+    }
 
-        // 渲染待办
-        function renderTodo(todos) {
-            if (!todos) todos = [];
-            todoList.innerHTML = '';
-            todos.forEach((item, index) => {
-                const li = document.createElement('li');
-                if (item.done) li.classList.add('completed');
-                li.innerHTML = `
-                    <input type="checkbox" class="checkbox" ${item.done ? 'checked' : ''} data-index="${index}">
-                    <div class="item-content">
-                        <div class="title">${escapeHtml(item.title)}</div>
-                        ${item.note ? `<div class="note">${escapeHtml(item.note)}</div>` : ''}
-                    </div>
-                    <div class="actions">
-                        <button class="delete-btn" data-type="todo" data-index="${index}">删除</button>
-                    </div>
-                `;
-                todoList.appendChild(li);
-            });
-            // 绑定复选框事件
-            todoList.querySelectorAll('.checkbox').forEach(cb => {
-                cb.addEventListener('change', function(e) {
-                    const idx = parseInt(this.dataset.index);
-                    const date = getCurrentDate();
-                    const dayData = getDayData(date);
-                    dayData.todo[idx].done = this.checked;
-                    setDayData(date, dayData);
-                    renderTodo(dayData.todo); // 刷新样式
-                });
-            });
-            // 绑定删除事件
-            todoList.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', function(e) {
-                    const idx = parseInt(this.dataset.index);
-                    const date = getCurrentDate();
-                    const dayData = getDayData(date);
-                    dayData.todo.splice(idx, 1);
-                    setDayData(date, dayData);
-                    renderAll();
-                });
-            });
-        }
-
-        // 渲染总结
-        function renderSummary(summary) {
-            summaryDisplay.textContent = summary || '今天还没有写总结。';
-            summaryInput.value = summary || '';
-        }
-
-        // 渲染记账
-        function renderFinance(finances) {
-            if (!finances) finances = [];
-            let totalIncome = 0, totalExpense = 0;
-            financeList.innerHTML = '';
-            finances.forEach((item, index) => {
-                const li = document.createElement('li');
-                if (item.type === 'income') li.classList.add('income-item');
-                const sign = item.type === 'income' ? '+' : '-';
-                li.innerHTML = `
-                    <div class="item-content">
-                        <div class="title">${sign} ¥${Number(item.amount).toFixed(2)}</div>
-                        ${item.desc ? `<div class="note">${escapeHtml(item.desc)}</div>` : ''}
-                    </div>
-                    <div class="actions">
-                        <button class="delete-btn" data-type="finance" data-index="${index}">删除</button>
-                    </div>
-                `;
-                financeList.appendChild(li);
-                if (item.type === 'income') totalIncome += Number(item.amount);
-                else totalExpense += Number(item.amount);
-            });
-            totalIncomeEl.textContent = totalIncome.toFixed(2);
-            totalExpenseEl.textContent = totalExpense.toFixed(2);
-            balanceEl.textContent = (totalIncome - totalExpense).toFixed(2);
-            // 绑定删除事件
-            financeList.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', function(e) {
-                    const idx = parseInt(this.dataset.index);
-                    const date = getCurrentDate();
-                    const dayData = getDayData(date);
-                    dayData.finance.splice(idx, 1);
-                    setDayData(date, dayData);
-                    renderAll();
-                });
-            });
-        }
-
-        // 简单转义
-        function escapeHtml(text) {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-
-        // --- 事件绑定 ---
-
-        // 日期切换
-        datePicker.addEventListener('change', function() {
-            renderAll();
+    function renderTodo(todos) {
+        if (!todos) todos = [];
+        todoList.innerHTML = '';
+        todos.forEach((item, index) => {
+            const li = document.createElement('li');
+            if (item.done) li.classList.add('completed');
+            li.innerHTML = `
+                <input type="checkbox" class="checkbox" ${item.done ? 'checked' : ''} data-index="${index}">
+                <div class="item-content">
+                    <div class="title">${escapeHtml(item.title)}</div>
+                    ${item.note ? `<div class="note">${escapeHtml(item.note)}</div>` : ''}
+                </div>
+                <div class="actions">
+                    <button class="delete-btn" data-type="todo" data-index="${index}">删除</button>
+                </div>
+            `;
+            todoList.appendChild(li);
         });
-
-        // 添加待办
-        addTodoBtn.addEventListener('click', function() {
-            const title = todoInput.value.trim();
-            const note = todoNote.value.trim();
-            if (!title) return;
-            const date = getCurrentDate();
-            const dayData = getDayData(date);
-            dayData.todo.push({ title, note, done: false });
-            setDayData(date, dayData);
-            todoInput.value = '';
-            todoNote.value = '';
-            renderTodo(dayData.todo);
-        });
-
-        // 保存总结
-        saveSummaryBtn.addEventListener('click', function() {
-            const summary = summaryInput.value.trim();
-            const date = getCurrentDate();
-            const dayData = getDayData(date);
-            dayData.summary = summary;
-            setDayData(date, dayData);
-            renderSummary(summary);
-        });
-
-        // 添加记账
-        addFinanceBtn.addEventListener('click', function() {
-            const type = financeType.value;
-            const amount = parseFloat(financeAmount.value);
-            const desc = financeDesc.value.trim();
-            if (isNaN(amount) || amount <= 0) return;
-            const date = getCurrentDate();
-            const dayData = getDayData(date);
-            dayData.finance.push({ type, amount, desc });
-            setDayData(date, dayData);
-            financeAmount.value = '';
-            financeDesc.value = '';
-            renderFinance(dayData.finance);
-        });
-
-        // 标签切换
-        document.querySelectorAll('.tab').forEach(tab => {
-            tab.addEventListener('click', function() {
-                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                this.classList.add('active');
-                const target = this.dataset.tab;
-                todoPanel.classList.add('hidden');
-                summaryPanel.classList.add('hidden');
-                financePanel.classList.add('hidden');
-                if (target === 'todo') todoPanel.classList.remove('hidden');
-                else if (target === 'summary') summaryPanel.classList.remove('hidden');
-                else if (target === 'finance') financePanel.classList.remove('hidden');
+        todoList.querySelectorAll('.checkbox').forEach(cb => {
+            cb.addEventListener('change', function(e) {
+                const idx = parseInt(this.dataset.index);
+                const date = getCurrentDate();
+                const dayData = getDayData(date);
+                dayData.todo[idx].done = this.checked;
+                setDayData(date, dayData);
+                renderTodo(dayData.todo);
             });
         });
+        todoList.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                const idx = parseInt(this.dataset.index);
+                const date = getCurrentDate();
+                const dayData = getDayData(date);
+                dayData.todo.splice(idx, 1);
+                setDayData(date, dayData);
+                renderAll();
+            });
+        });
+    }
 
-        // 初始渲染
+    function renderSummary(summary) {
+        summaryDisplay.textContent = summary || '今天还没有写总结。';
+        summaryInput.value = summary || '';
+    }
+
+    function renderFinance(finances) {
+        if (!finances) finances = [];
+        let totalIncome = 0, totalExpense = 0;
+        financeList.innerHTML = '';
+        finances.forEach((item, index) => {
+            const li = document.createElement('li');
+            if (item.type === 'income') li.classList.add('income-item');
+            const sign = item.type === 'income' ? '+' : '-';
+            li.innerHTML = `
+                <div class="item-content">
+                    <div class="title">${sign} ¥${Number(item.amount).toFixed(2)}</div>
+                    ${item.desc ? `<div class="note">${escapeHtml(item.desc)}</div>` : ''}
+                </div>
+                <div class="actions">
+                    <button class="delete-btn" data-type="finance" data-index="${index}">删除</button>
+                </div>
+            `;
+            financeList.appendChild(li);
+            if (item.type === 'income') totalIncome += Number(item.amount);
+            else totalExpense += Number(item.amount);
+        });
+        totalIncomeEl.textContent = totalIncome.toFixed(2);
+        totalExpenseEl.textContent = totalExpense.toFixed(2);
+        balanceEl.textContent = (totalIncome - totalExpense).toFixed(2);
+        financeList.querySelectorAll('.delete-btn').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                const idx = parseInt(this.dataset.index);
+                const date = getCurrentDate();
+                const dayData = getDayData(date);
+                dayData.finance.splice(idx, 1);
+                setDayData(date, dayData);
+                renderAll();
+            });
+        });
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // ==========================================
+    // 7. 事件绑定
+    // ==========================================
+    datePicker.addEventListener('change', function() {
         renderAll();
-    })();
+    });
+
+    addTodoBtn.addEventListener('click', function() {
+        const title = todoInput.value.trim();
+        const note = todoNote.value.trim();
+        if (!title) return;
+        const date = getCurrentDate();
+        const dayData = getDayData(date);
+        dayData.todo.push({ title, note, done: false });
+        setDayData(date, dayData);
+        todoInput.value = '';
+        todoNote.value = '';
+        renderTodo(dayData.todo);
+    });
+
+    saveSummaryBtn.addEventListener('click', function() {
+        const summary = summaryInput.value.trim();
+        const date = getCurrentDate();
+        const dayData = getDayData(date);
+        dayData.summary = summary;
+        setDayData(date, dayData);
+        renderSummary(summary);
+    });
+
+    addFinanceBtn.addEventListener('click', function() {
+        const type = financeType.value;
+        const amount = parseFloat(financeAmount.value);
+        const desc = financeDesc.value.trim();
+        if (isNaN(amount) || amount <= 0) return;
+        const date = getCurrentDate();
+        const dayData = getDayData(date);
+        dayData.finance.push({ type, amount, desc });
+        setDayData(date, dayData);
+        financeAmount.value = '';
+        financeDesc.value = '';
+        renderFinance(dayData.finance);
+    });
+
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            const target = this.dataset.tab;
+            todoPanel.classList.add('hidden');
+            summaryPanel.classList.add('hidden');
+            financePanel.classList.add('hidden');
+            if (target === 'todo') todoPanel.classList.remove('hidden');
+            else if (target === 'summary') summaryPanel.classList.remove('hidden');
+            else if (target === 'finance') financePanel.classList.remove('hidden');
+        });
+    });
+
+    // ==========================================
+    // 8. 初始化：从云端加载数据
+    // ==========================================
+    async function initializeApp() {
+        const userId = 'default_user';
+        
+        // 尝试从云端加载数据
+        const cloudData = await fetchDataFromFirebase(userId);
+        if (cloudData) {
+            localStorage.setItem('memoData', JSON.stringify(cloudData));
+        }
+        
+        // 启动实时监听
+        subscribeToFirebase(userId);
+        
+        // 渲染界面
+        renderAll();
+        
+        // 如果当前没有云端数据，立即同步一次
+        if (!cloudData) {
+            const localData = getData();
+            if (Object.keys(localData).length > 0) {
+                syncDataToFirebase(userId, localData);
+            }
+        }
+    }
+
+    // 启动应用
+    initializeApp();
 </script>
 </body>
 </html>
